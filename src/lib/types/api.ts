@@ -82,6 +82,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/playlists/{playlistId}/subscribers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 플레이리스트 구독자 목록 조회 (커서 페이지네이션)
+         * @description 특정 플레이리스트를 구독한 사용자들의 목록을 최근순(created_at DESC) 으로 반환합니다.
+         */
+        get: operations["getPlaylistSubscribers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/playlists/{playlistId}/contents/{contentId}": {
         parameters: {
             query?: never;
@@ -382,6 +402,8 @@ export interface paths {
         /**
          * 플레이리스트 수정
          * @description 플레이리스트 소유자만 수정할 수 있습니다.
+         *     요청 본문의 필드가 `null` 이거나 빈 문자열/공백만 있는 경우 해당 필드는 무시되고 기존값이 유지됩니다.
+         *     단, `title` 은 255자 제한이 우선 적용되어 256자 이상 문자열(공백 포함)은 400 이 반환됩니다.
          */
         patch: operations["updatePlaylist"];
         trace?: never;
@@ -487,6 +509,46 @@ export interface paths {
         };
         /** 특정 유저의 팔로워 수 조회 */
         get: operations["getFollowerCount"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/follows/followers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 특정 유저의 팔로워 목록 조회 (커서 페이지네이션)
+         * @description 지정한 followeeId 를 팔로우한 사용자들의 목록을 최근순(created_at DESC)으로 반환합니다.
+         */
+        get: operations["getFollowers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/follows/followings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 특정 유저의 팔로잉 목록 조회 (커서 페이지네이션)
+         * @description 지정한 followerId 가 팔로우 중인 사용자들의 목록을 최근순(created_at DESC)으로 반환합니다.
+         */
+        get: operations["getFollowings"];
         put?: never;
         post?: never;
         delete?: never;
@@ -641,9 +703,14 @@ export interface components {
             /** @description 오류 메시지 */
             message: string;
             /** @description 오류 부가 정보 */
-            details?: {
+            details: {
                 [key: string]: string;
             };
+            /**
+             * @description 애플리케이션 오류 코드
+             * @example COMMON_400_1
+             */
+            errorCode: string;
         };
         UserDto: {
             /**
@@ -667,7 +734,7 @@ export interface components {
              * @enum {string}
              */
             role: "USER" | "ADMIN";
-            locked?: boolean;
+            locked: boolean;
         };
         ReviewCreateRequest: {
             /**
@@ -704,16 +771,21 @@ export interface components {
              */
             rating: number;
         };
+        /**
+         * @description 여러 도메인의 응답에서 공통으로 사용하는 사용자 요약.
+         *     name / profileImageUrl 은 User 도메인 연동이 완료되기 전까지 null 로 반환될 수 있어
+         *     OpenAPI 3.1 표준 nullable 표기(["string", "null"])를 사용한다.
+         */
         UserSummary: {
             /**
              * Format: uuid
              * @description 사용자 ID
              */
             userId: string;
-            /** @description 사용자 이름 */
-            name: string;
-            /** @description 사용자 프로필 이미지 URL */
-            profileImageUrl?: string;
+            /** @description 사용자 이름 (User 도메인 연동 전까지 null 가능) */
+            name?: string | null;
+            /** @description 사용자 프로필 이미지 URL (User 도메인 연동 전까지 null 가능) */
+            profileImageUrl?: string | null;
         };
         PlaylistCreateRequest: {
             /** @description 플레이리스트 제목 */
@@ -778,6 +850,21 @@ export interface components {
             /** @description 플레이리스트에 포함된 콘텐츠 목록 */
             contents: components["schemas"]["ContentSummary"][];
         };
+        /** @description 플레이리스트 구독자 목록의 아이템. */
+        SubscriberItemDto: {
+            /**
+             * Format: uuid
+             * @description 구독 관계 ID
+             */
+            subscriptionId: string;
+            /** @description 구독자 요약. name/profileImageUrl 은 User 도메인 연동 전까지 null. */
+            user: components["schemas"]["UserSummary"];
+            /**
+             * Format: date-time
+             * @description 구독 생성 시각
+             */
+            subscribedAt: string;
+        };
         FollowRequest: {
             /**
              * Format: uuid
@@ -802,6 +889,21 @@ export interface components {
              */
             followerId: string;
         };
+        /** @description 팔로워/팔로잉 목록의 아이템. followers 응답에서 user 는 팔로워, followings 응답에서 user 는 팔로우 대상. */
+        FollowUserItemDto: {
+            /**
+             * Format: uuid
+             * @description 팔로우 관계 ID (unfollow 시 사용)
+             */
+            followId: string;
+            /** @description 상대 사용자 요약. name/profileImageUrl 은 User 도메인 연동 전까지 null. */
+            user: components["schemas"]["UserSummary"];
+            /**
+             * Format: date-time
+             * @description 팔로우 관계 생성 시각
+             */
+            followedAt: string;
+        };
         ConversationCreateRequest: {
             /**
              * Format: uuid
@@ -817,10 +919,10 @@ export interface components {
             id: string;
             /** @description 대화 상대 정보 */
             with: components["schemas"]["UserSummary"];
-            /** @description 마지막 메시지 내용 */
-            lastestMessage: components["schemas"]["DirectMessageDto"];
             /** @description 읽지 않은 메시지 존재 여부 */
             hasUnread: boolean;
+            /** @description 마지막 메시지 내용. 새 대화에는 null입니다. */
+            latestMessage: components["schemas"]["DirectMessageDto"] | null;
         };
         DirectMessageDto: {
             /**
@@ -895,7 +997,7 @@ export interface components {
         };
         SignInRequest: {
             /** @description 이메일 */
-            username: string;
+            email: string;
             /** @description 비밀번호 */
             password: string;
         };
@@ -919,7 +1021,7 @@ export interface components {
             role: "USER" | "ADMIN";
         };
         ChangePasswordRequest: {
-            /** @description 새 비밀번호 */
+            /** @description 8~72자의 새 비밀번호입니다. ASCII 영문, 숫자, 특수문자를 각각 하나 이상 포함해야 합니다. */
             password: string;
         };
         UserLockUpdateRequest: {
@@ -935,11 +1037,12 @@ export interface components {
              */
             rating?: number;
         };
+        /** @description 플레이리스트 부분 수정 요청. `null` 또는 빈 문자열/공백만 있는 필드는 무시되고 기존값이 유지됩니다. */
         PlaylistUpdateRequest: {
-            /** @description 플레이리스트 제목 */
-            title?: string;
-            /** @description 플레이리스트 설명 */
-            description?: string;
+            /** @description 플레이리스트 제목. `null` 또는 빈 문자열/공백만 있는 경우 기존값이 유지됩니다. 256자 이상 문자열(공백 포함)은 400 이 반환됩니다. */
+            title?: string | null;
+            /** @description 플레이리스트 설명. `null` 또는 빈 문자열/공백만 있는 경우 기존값이 유지됩니다. */
+            description?: string | null;
         };
         ContentUpdateRequest: {
             /** @description 콘텐츠 제목 */
@@ -953,12 +1056,12 @@ export interface components {
             /** @description 데이터 목록 */
             data: components["schemas"]["UserDto"][];
             /** @description 다음 커서 */
-            nextCursor?: string;
+            nextCursor?: string | null;
             /**
              * Format: uuid
              * @description 다음 요청의 보조 커서
              */
-            nextIdAfter?: string;
+            nextIdAfter?: string | null;
             /** @description 다음 데이터가 있는지 여부 */
             hasNext: boolean;
             /**
@@ -998,12 +1101,37 @@ export interface components {
             /** @description 데이터 목록 */
             data: components["schemas"]["ReviewDto"][];
             /** @description 다음 커서 */
-            nextCursor?: string;
+            nextCursor?: string | null;
             /**
              * Format: uuid
              * @description 다음 요청의 보조 커서
              */
-            nextIdAfter?: string;
+            nextIdAfter?: string | null;
+            /** @description 다음 데이터가 있는지 여부 */
+            hasNext: boolean;
+            /**
+             * Format: int64
+             * @description 총 데이터 개수
+             */
+            totalCount: number;
+            /** @description 정렬 기준 */
+            sortBy: string;
+            /**
+             * @description 정렬 방향
+             * @enum {string}
+             */
+            sortDirection: "ASCENDING" | "DESCENDING";
+        };
+        CursorResponseSubscriberItemDto: {
+            /** @description 구독자 목록 */
+            data: components["schemas"]["SubscriberItemDto"][];
+            /** @description 다음 커서 */
+            nextCursor?: string | null;
+            /**
+             * Format: uuid
+             * @description 다음 요청의 보조 커서
+             */
+            nextIdAfter?: string | null;
             /** @description 다음 데이터가 있는지 여부 */
             hasNext: boolean;
             /**
@@ -1023,12 +1151,37 @@ export interface components {
             /** @description 데이터 목록 */
             data: components["schemas"]["PlaylistDto"][];
             /** @description 다음 커서 */
-            nextCursor?: string;
+            nextCursor?: string | null;
             /**
              * Format: uuid
              * @description 다음 요청의 보조 커서
              */
-            nextIdAfter?: string;
+            nextIdAfter?: string | null;
+            /** @description 다음 데이터가 있는지 여부 */
+            hasNext: boolean;
+            /**
+             * Format: int64
+             * @description 총 데이터 개수
+             */
+            totalCount: number;
+            /** @description 정렬 기준 */
+            sortBy: string;
+            /**
+             * @description 정렬 방향
+             * @enum {string}
+             */
+            sortDirection: "ASCENDING" | "DESCENDING";
+        };
+        CursorResponseFollowUserItemDto: {
+            /** @description 팔로워/팔로잉 목록 */
+            data: components["schemas"]["FollowUserItemDto"][];
+            /** @description 다음 커서 */
+            nextCursor?: string | null;
+            /**
+             * Format: uuid
+             * @description 다음 요청의 보조 커서
+             */
+            nextIdAfter?: string | null;
             /** @description 다음 데이터가 있는지 여부 */
             hasNext: boolean;
             /**
@@ -1048,12 +1201,12 @@ export interface components {
             /** @description 데이터 목록 */
             data: components["schemas"]["NotificationDto"][];
             /** @description 다음 커서 */
-            nextCursor?: string;
+            nextCursor?: string | null;
             /**
              * Format: uuid
              * @description 다음 요청의 보조 커서
              */
-            nextIdAfter?: string;
+            nextIdAfter?: string | null;
             /** @description 다음 데이터가 있는지 여부 */
             hasNext: boolean;
             /**
@@ -1094,17 +1247,22 @@ export interface components {
              * @enum {string}
              */
             level: "INFO" | "WARNING" | "ERROR";
+            /**
+             * Format: date-time
+             * @description 알림을 읽은 시각. 읽지 않은 알림이면 null입니다.
+             */
+            readAt?: string | null;
         };
         CursorResponseConversationDto: {
             /** @description 데이터 목록 */
             data: components["schemas"]["ConversationDto"][];
             /** @description 다음 커서 */
-            nextCursor?: string;
+            nextCursor?: string | null;
             /**
              * Format: uuid
              * @description 다음 요청의 보조 커서
              */
-            nextIdAfter?: string;
+            nextIdAfter?: string | null;
             /** @description 다음 데이터가 있는지 여부 */
             hasNext: boolean;
             /**
@@ -1124,12 +1282,12 @@ export interface components {
             /** @description 데이터 목록 */
             data: components["schemas"]["DirectMessageDto"][];
             /** @description 다음 커서 */
-            nextCursor?: string;
+            nextCursor?: string | null;
             /**
              * Format: uuid
              * @description 다음 요청의 보조 커서
              */
-            nextIdAfter?: string;
+            nextIdAfter?: string | null;
             /** @description 다음 데이터가 있는지 여부 */
             hasNext: boolean;
             /**
@@ -1149,12 +1307,12 @@ export interface components {
             /** @description 데이터 목록 */
             data: components["schemas"]["ContentDto"][];
             /** @description 다음 커서 */
-            nextCursor?: string;
+            nextCursor?: string | null;
             /**
              * Format: uuid
              * @description 다음 요청의 보조 커서
              */
-            nextIdAfter?: string;
+            nextIdAfter?: string | null;
             /** @description 다음 데이터가 있는지 여부 */
             hasNext: boolean;
             /**
@@ -1174,12 +1332,12 @@ export interface components {
             /** @description 데이터 목록 */
             data: components["schemas"]["WatchingSessionDto"][];
             /** @description 다음 커서 */
-            nextCursor?: string;
+            nextCursor?: string | null;
             /**
              * Format: uuid
              * @description 다음 요청의 보조 커서
              */
-            nextIdAfter?: string;
+            nextIdAfter?: string | null;
             /** @description 다음 데이터가 있는지 여부 */
             hasNext: boolean;
             /**
@@ -1194,6 +1352,13 @@ export interface components {
              * @enum {string}
              */
             sortDirection: "ASCENDING" | "DESCENDING";
+        };
+        FollowerCountResponse: {
+            /**
+             * Format: int64
+             * @description 팔로워 수
+             */
+            count: number;
         };
     };
     responses: never;
@@ -1212,7 +1377,7 @@ export interface operations {
                 /** @description 권한 */
                 roleEqual?: "USER" | "ADMIN";
                 /** @description 계정 잠금 상태 */
-                isLocked?: boolean;
+                locked?: boolean;
                 /** @description 커서 */
                 cursor?: string;
                 /** @description 보조 커서 */
@@ -1222,7 +1387,7 @@ export interface operations {
                 /** @description 정렬 방향 */
                 sortDirection: "ASCENDING" | "DESCENDING";
                 /** @description 정렬 기준 */
-                sortBy: "name" | "email" | "createdAt" | "isLocked" | "role";
+                sortBy: "name" | "email" | "createdAt" | "locked" | "role";
             };
             header?: never;
             path?: never;
@@ -1290,16 +1455,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 성공 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "*/*": components["schemas"]["UserDto"];
-                };
-            };
-            /** @description 성공 */
+            /** @description 새 사용자 생성 */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -1317,8 +1473,8 @@ export interface operations {
                     "*/*": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description 인증 오류 */
-            401: {
+            /** @description 이미 사용 중인 이메일 */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1410,16 +1566,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 성공 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "*/*": components["schemas"]["ReviewDto"];
-                };
-            };
-            /** @description 성공 */
+            /** @description 새 리뷰 생성 */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -1439,6 +1586,15 @@ export interface operations {
             };
             /** @description 인증 오류 */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 동일한 콘텐츠에 작성한 리뷰가 이미 존재함 */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1475,7 +1631,7 @@ export interface operations {
                 /** @description 정렬 방향 */
                 sortDirection: "ASCENDING" | "DESCENDING";
                 /** @description 정렬 기준 */
-                sortBy: "updatedAt" | "subscribeCount";
+                sortBy: "updatedAt" | "subscriberCount";
             };
             header?: never;
             path?: never;
@@ -1535,15 +1691,6 @@ export interface operations {
         };
         responses: {
             /** @description 성공 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "*/*": components["schemas"]["PlaylistDto"];
-                };
-            };
-            /** @description 성공 */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -1592,14 +1739,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 성공 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description 성공 */
+            /** @description 구독 완료. 이미 구독 중이어도 성공 */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -1647,13 +1787,6 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description 성공 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description 성공 */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -1689,6 +1822,72 @@ export interface operations {
             };
         };
     };
+    getPlaylistSubscribers: {
+        parameters: {
+            query: {
+                /** @description 다음 페이지 커서 (마지막 subscribedAt 을 Base64 로 인코딩). idAfter 와 함께 제공해야 합니다. */
+                cursor?: string;
+                /** @description 같은 subscribedAt 값 내 UUID 타이브레이커. cursor 와 함께 제공해야 합니다. */
+                idAfter?: string;
+                limit: number;
+                sortBy?: "subscribedAt";
+                sortDirection?: "DESCENDING";
+            };
+            header?: never;
+            path: {
+                playlistId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 성공 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["CursorResponseSubscriberItemDto"];
+                };
+            };
+            /** @description 잘못된 요청 (파라미터 검증 실패, 잘못된 커서, cursor/idAfter 부정합) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 인증 오류 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 존재하지 않는 플레이리스트 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 서버 오류 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     addContentToPlaylist: {
         parameters: {
             query?: never;
@@ -1701,14 +1900,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 성공 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description 성공 */
+            /** @description 추가 완료. 이미 포함된 콘텐츠여도 성공 */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -1765,13 +1957,6 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 성공 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
             /** @description 성공 */
             204: {
                 headers: {
@@ -1830,7 +2015,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 성공 */
+            /** @description 이미 팔로우 중이면 기존 관계 반환 */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -1839,7 +2024,7 @@ export interface operations {
                     "*/*": components["schemas"]["FollowDto"];
                 };
             };
-            /** @description 성공 */
+            /** @description 새 팔로우 관계 생성 */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -1950,8 +2135,17 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 성공 */
+            /** @description 이미 대화가 있으면 기존 대화 반환 */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ConversationDto"];
+                };
+            };
+            /** @description 새 대화 생성 */
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1970,6 +2164,15 @@ export interface operations {
             };
             /** @description 인증 오류 */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 대화 상대 사용자를 찾을 수 없음 */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2001,7 +2204,7 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description 성공 */
-            200: {
+            204: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2018,6 +2221,24 @@ export interface operations {
             };
             /** @description 인증 오류 */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description DM 읽음 처리 권한 없음 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 대화 또는 DM을 찾을 수 없거나 접근할 수 없음 */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2054,7 +2275,7 @@ export interface operations {
                 /** @description 정렬 방향 */
                 sortDirection: "ASCENDING" | "DESCENDING";
                 /** @description 정렬 기준 */
-                sortBy: "createdAt" | "watcherCount" | "rate";
+                sortBy: "createdAt" | "watcherCount" | "averageRating";
             };
             header?: never;
             path?: never;
@@ -2118,15 +2339,6 @@ export interface operations {
         };
         responses: {
             /** @description 성공 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "*/*": components["schemas"]["ContentDto"];
-                };
-            };
-            /** @description 성공 */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -2183,13 +2395,6 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description 성공 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description 성공 */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -2225,7 +2430,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/x-www-form-urlencoded": components["schemas"]["SignInRequest"];
+                "application/json": components["schemas"]["SignInRequest"];
             };
         };
         responses: {
@@ -2280,13 +2485,6 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 성공 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
             /** @description 성공 */
             204: {
                 headers: {
@@ -2513,13 +2711,6 @@ export interface operations {
         };
         responses: {
             /** @description 성공 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description 성공 */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -2580,13 +2771,6 @@ export interface operations {
         };
         responses: {
             /** @description 성공 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description 성공 */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -2620,6 +2804,15 @@ export interface operations {
                     "*/*": components["schemas"]["ErrorResponse"];
                 };
             };
+            /** @description 사용자를 찾을 수 없음 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description 서버 오류 */
             500: {
                 headers: {
@@ -2646,13 +2839,6 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 성공 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
             /** @description 성공 */
             204: {
                 headers: {
@@ -2710,7 +2896,7 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description 성공 */
-            200: {
+            204: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2877,7 +3063,7 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description 성공 */
-            200: {
+            204: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3044,7 +3230,7 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description 성공 */
-            200: {
+            204: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3099,7 +3285,7 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": {
+                "multipart/form-data": {
                     request: components["schemas"]["ContentUpdateRequest"];
                     /** Format: binary */
                     thumbnail?: string;
@@ -3174,6 +3360,13 @@ export interface operations {
                     "*/*": components["schemas"]["WatchingSessionDto"];
                 };
             };
+            /** @description 현재 시청 중인 콘텐츠가 없음 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description 잘못된 요청 */
             400: {
                 headers: {
@@ -3221,6 +3414,24 @@ export interface operations {
                 };
                 content: {
                     "text/event-stream": components["schemas"]["SseEmitter"];
+                };
+            };
+            /** @description 인증 오류 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 서버 오류 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
                 };
             };
         };
@@ -3358,10 +3569,122 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": number;
+                    "*/*": components["schemas"]["FollowerCountResponse"];
                 };
             };
             /** @description 잘못된 요청 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 인증 오류 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 서버 오류 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getFollowers: {
+        parameters: {
+            query: {
+                followeeId: string;
+                /** @description 다음 페이지 커서 (마지막 followedAt 을 Base64 로 인코딩). idAfter 와 함께 제공해야 합니다. */
+                cursor?: string;
+                /** @description 같은 followedAt 값 내 UUID 타이브레이커. cursor 와 함께 제공해야 합니다. */
+                idAfter?: string;
+                limit: number;
+                sortBy?: "followedAt";
+                sortDirection?: "DESCENDING";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 성공 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["CursorResponseFollowUserItemDto"];
+                };
+            };
+            /** @description 잘못된 요청 (파라미터 검증 실패, 잘못된 커서, cursor/idAfter 부정합) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 인증 오류 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 서버 오류 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getFollowings: {
+        parameters: {
+            query: {
+                followerId: string;
+                /** @description 다음 페이지 커서. idAfter 와 함께 제공해야 합니다. */
+                cursor?: string;
+                /** @description 같은 followedAt 값 내 UUID 타이브레이커. cursor 와 함께 제공해야 합니다. */
+                idAfter?: string;
+                limit: number;
+                sortBy?: "followedAt";
+                sortDirection?: "DESCENDING";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 성공 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["CursorResponseFollowUserItemDto"];
+                };
+            };
+            /** @description 잘못된 요청 (파라미터 검증 실패, 잘못된 커서, cursor/idAfter 부정합) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -3497,6 +3820,15 @@ export interface operations {
                     "*/*": components["schemas"]["ErrorResponse"];
                 };
             };
+            /** @description 대화를 찾을 수 없거나 접근할 수 없음 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description 서버 오류 */
             500: {
                 headers: {
@@ -3617,6 +3949,15 @@ export interface operations {
                     "*/*": components["schemas"]["ErrorResponse"];
                 };
             };
+            /** @description 존재하지 않는 콘텐츠 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description 서버 오류 */
             500: {
                 headers: {
@@ -3637,13 +3978,6 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 성공 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
             /** @description 성공 */
             204: {
                 headers: {
@@ -3682,13 +4016,6 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 성공 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
             /** @description 성공 */
             204: {
                 headers: {
@@ -3736,13 +4063,6 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 성공 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
             /** @description 성공 */
             204: {
                 headers: {
