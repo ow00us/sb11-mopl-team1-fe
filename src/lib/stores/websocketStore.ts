@@ -1,111 +1,210 @@
-import { Client, type StompSubscription } from '@stomp/stompjs';
+import { Client, type IFrame, type StompSubscription } from '@stomp/stompjs';
 import SockJS from 'sockjs-client';
+import { toast } from 'sonner';
 import { create } from 'zustand';
+import type { ErrorResponse } from '@/lib/types';
+import { isForbidden, isUnauthorized, parseStompErrorFrame } from '@/lib/realtime/stompError';
+import useAuthStore from '@/lib/stores/useAuthStore';
 
 interface WebSocketState {
   stompClient: Client | null;
   isConnected: boolean;
   isConnecting: boolean;
   subscriptions: Map<string, StompSubscription>;
+
+  /** 마지막 ERROR 프레임입니다. 연결이 정상화되면 비워집니다. */
+  lastError: ErrorResponse | null;
+  /** 재연결로는 해소되지 않아 중단한 상태입니다. */
+  isBlocked: boolean;
+
   connect: (accessToken: string) => Promise<void>;
   disconnect: () => void;
-  subscribe: (destination: string, callback: (message: any) => void) => void;
+  subscribe: <T>(destination: string, callback: (message: T) => void) => void;
   unsubscribe: (destination: string) => void;
-  send: (destination: string, body: any) => void;
+  send: (destination: string, body: unknown) => void;
 }
 
-export const useWebSocketStore = create<WebSocketState>((set, get) => ({
-  stompClient: null,
-  isConnected: false,
-  isConnecting: false,
-  subscriptions: new Map(),
+/** 401 ERROR 프레임을 받았을 때 토큰을 새로 받아 재연결하는 횟수입니다. */
+const MAX_REAUTH_ATTEMPTS = 1;
 
-  connect: async (accessToken: string) => {
-    const { isConnected, isConnecting } = get();
-    if (isConnected || isConnecting) return;
+export const useWebSocketStore = create<WebSocketState>((set, get) => {
+  let reauthAttempts = 0;
+  let needsReauth = false;
 
-    set({ isConnecting: true });
-
-    const BASE_URL = import.meta.env.VITE_PUBLIC_PATH || '';
-    const socket = new SockJS(`${BASE_URL}/ws`);
-    const client = new Client({
-      webSocketFactory: () => socket,
-      connectHeaders: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-      debug: (str) => {
-        console.log(str);
-      },
-      reconnectDelay: 5000,
-      heartbeatIncoming: 4000,
-      heartbeatOutgoing: 4000,
+  /**
+   * 재연결을 멈추고 사유를 남깁니다.
+   *
+   * 403 처럼 같은 요청을 반복해도 결과가 같은 경우에 씁니다. deactivate 하지 않으면
+   * stompjs 가 reconnectDelay 마다 같은 실패를 되풀이합니다.
+   */
+  const block = (client: Client, error: ErrorResponse) => {
+    void client.deactivate();
+    set({
+      stompClient: null,
+      isConnected: false,
+      isConnecting: false,
+      subscriptions: new Map(),
+      lastError: error,
+      isBlocked: true,
     });
+  };
 
-    client.onConnect = () => {
-      set({ stompClient: client, isConnected: true, isConnecting: false });
-      console.log('WebSocket 연결 성공');
-    };
+  return {
+    stompClient: null,
+    isConnected: false,
+    isConnecting: false,
+    subscriptions: new Map(),
+    lastError: null,
+    isBlocked: false,
 
-    client.onStompError = (frame) => {
-      console.error('STOMP 에러:', frame);
-      set({ isConnected: false, stompClient: null, isConnecting: false });
-    };
+    connect: (accessToken: string) => {
+      const { isConnected, isConnecting } = get();
+      if (isConnected || isConnecting) return Promise.resolve();
 
-    client.onWebSocketClose = () => {
-      set({ isConnected: false, stompClient: null, isConnecting: false });
-    };
+      set({ isConnecting: true, lastError: null, isBlocked: false });
+      reauthAttempts = 0;
+      needsReauth = false;
 
-    client.activate();
-  },
+      const BASE_URL = import.meta.env.VITE_PUBLIC_PATH || '';
 
-  disconnect: () => {
-    const { stompClient, isConnected } = get();
-    if (stompClient && isConnected) {
-      stompClient.deactivate();
-      set({ stompClient: null, isConnected: false, subscriptions: new Map() });
-    }
-  },
-
-  subscribe: (destination: string, callback: <T>(message: T) => void) => {
-    const { stompClient, isConnected, subscriptions } = get();
-
-    if (subscriptions.has(destination) || !isConnected || stompClient == null) {
-      return;
-    }
-
-    const subscription: StompSubscription = stompClient.subscribe(destination, (message) => {
-      const payload = JSON.parse(message.body);
-      callback(payload);
-    });
-
-    subscriptions.set(destination, subscription);
-  },
-
-  unsubscribe: (destination: string) => {
-    const { stompClient, isConnected, subscriptions } = get();
-
-    if (!subscriptions.has(destination) || !isConnected || stompClient == null) {
-      return;
-    }
-
-    const subscription = subscriptions.get(destination);
-    if (subscription) {
-      subscription.unsubscribe();
-      subscriptions.delete(destination);
-      set({ subscriptions });
-    }
-  },
-
-  send: (destination: string, body: any) => {
-    const { stompClient, isConnected } = get();
-
-    if (stompClient && isConnected) {
-      stompClient.publish({
-        destination,
-        body: JSON.stringify(body),
+      const client = new Client({
+        // 매번 새 SockJS 를 만들어야 합니다. 닫힌 소켓은 재사용할 수 없어서
+        // 인스턴스를 고정하면 재연결이 첫 시도에서 끊깁니다.
+        webSocketFactory: () => new SockJS(`${BASE_URL}/ws`),
+        connectHeaders: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+        reconnectDelay: 5000,
+        heartbeatIncoming: 4000,
+        heartbeatOutgoing: 4000,
       });
-    } else {
-      console.error('WebSocket이 연결되어 있지 않습니다.');
-    }
-  },
-}));
+
+      // 재연결 시점의 토큰을 다시 읽습니다. connectHeaders 를 만들 때 잡아둔 토큰은
+      // 그 사이 갱신되었더라도 그대로 남아 있어, 만료 후에는 계속 401 을 받습니다.
+      //
+      // 401 이후의 재발급도 여기서 기다립니다. stompjs 는 beforeConnect 의 Promise 가
+      // 끝날 때까지 연결을 열지 않으므로, onStompError 에서 발급을 시작하고 5초 뒤
+      // 자동 재연결이 이를 앞지르는 경합이 생기지 않습니다.
+      client.beforeConnect = async () => {
+        if (needsReauth) {
+          needsReauth = false;
+          try {
+            await useAuthStore.getState().fetch({ throwError: true });
+          } catch {
+            // 재발급이 실패하면 이어지는 401 에서 차단 처리합니다.
+          }
+        }
+
+        const currentToken = useAuthStore.getState().getAccessToken() ?? accessToken;
+        client.connectHeaders = { Authorization: `Bearer ${currentToken}` };
+      };
+
+      return new Promise<void>((resolve, reject) => {
+        client.onConnect = () => {
+          reauthAttempts = 0;
+          set({
+            stompClient: client,
+            isConnected: true,
+            isConnecting: false,
+            lastError: null,
+            isBlocked: false,
+          });
+          resolve();
+        };
+
+        client.onStompError = (frame: IFrame) => {
+          const error = parseStompErrorFrame(frame);
+
+          if (isForbidden(error)) {
+            block(client, error);
+            toast.error(error.message);
+            reject(error);
+            return;
+          }
+
+          if (isUnauthorized(error) && reauthAttempts < MAX_REAUTH_ATTEMPTS) {
+            reauthAttempts += 1;
+            needsReauth = true;
+            set({ isConnected: false, isConnecting: true, lastError: error });
+            // 실제 재발급은 자동 재연결 직전 beforeConnect 에서 기다립니다.
+            return;
+          }
+
+          if (isUnauthorized(error)) {
+            block(client, error);
+            toast.error('실시간 연결 인증에 실패했습니다. 다시 로그인해 주세요.');
+            reject(error);
+            return;
+          }
+
+          // 그 밖의 오류는 일시적일 수 있어 stompjs 의 자동 재연결에 맡깁니다.
+          set({ isConnected: false, isConnecting: false, lastError: error });
+        };
+
+        client.onWebSocketClose = () => {
+          if (get().isBlocked) return;
+          set({ isConnected: false, isConnecting: false });
+        };
+
+        client.activate();
+      });
+    },
+
+    disconnect: () => {
+      const { stompClient } = get();
+      if (stompClient) {
+        void stompClient.deactivate();
+      }
+      set({
+        stompClient: null,
+        isConnected: false,
+        isConnecting: false,
+        subscriptions: new Map(),
+        lastError: null,
+        isBlocked: false,
+      });
+    },
+
+    subscribe: <T,>(destination: string, callback: (message: T) => void) => {
+      const { stompClient, isConnected, subscriptions } = get();
+
+      if (subscriptions.has(destination) || !isConnected || stompClient == null) {
+        return;
+      }
+
+      const subscription = stompClient.subscribe(destination, (message) => {
+        callback(JSON.parse(message.body) as T);
+      });
+
+      const next = new Map(subscriptions);
+      next.set(destination, subscription);
+      set({ subscriptions: next });
+    },
+
+    unsubscribe: (destination: string) => {
+      const { subscriptions } = get();
+
+      const subscription = subscriptions.get(destination);
+      if (!subscription) return;
+
+      subscription.unsubscribe();
+
+      const next = new Map(subscriptions);
+      next.delete(destination);
+      set({ subscriptions: next });
+    },
+
+    send: (destination: string, body: unknown) => {
+      const { stompClient, isConnected } = get();
+
+      if (stompClient && isConnected) {
+        stompClient.publish({
+          destination,
+          body: JSON.stringify(body),
+        });
+      } else {
+        console.error('WebSocket이 연결되어 있지 않습니다.');
+      }
+    },
+  };
+});
