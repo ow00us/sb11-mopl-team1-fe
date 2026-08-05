@@ -6,7 +6,7 @@ import {execute} from "@/lib/stores/utils";
 import {createBaseStoreActions} from "@/lib/stores/actions.ts";
 
 interface AuthStore extends BaseStore<JwtDto, unknown> {
-  signIn: (username: string, password: string) => Promise<void>;
+  signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   isAuthenticated: () => boolean;
   getAccessToken: () => string | null;
@@ -17,10 +17,10 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     set, get,
     fetchApi: refreshToken,
   }),
-  signIn: async (username: string, password: string) => {
+  signIn: async (email: string, password: string) => {
     await execute(
         set, get,
-        () => signIn({ username, password }),
+        () => signIn({ email, password }),
         {
           shouldThrow: true
         }

@@ -15,21 +15,13 @@ import type { SignInRequest, JwtDto, ResetPasswordRequest } from '@/lib/types';
  * Sign in (로그인)
  * POST /api/auth/sign-in
  *
- * @param credentials - User credentials (username = email, password)
+ * @param credentials - User credentials (email, password)
  * @returns JWT token and user information
  *
- * Note: Uses application/x-www-form-urlencoded format
+ * Note: Uses application/json format
  */
 export const signIn = async (credentials: SignInRequest): Promise<JwtDto> => {
-  const params = new URLSearchParams();
-  if (credentials.username) params.append('username', credentials.username);
-  if (credentials.password) params.append('password', credentials.password);
-
-  const response = await apiClient.post<JwtDto>('/api/auth/sign-in', params, {
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-  });
+  const response = await apiClient.post<JwtDto>('/api/auth/sign-in', credentials);
 
   return response.data;
 };
