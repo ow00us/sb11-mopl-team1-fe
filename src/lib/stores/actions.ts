@@ -298,8 +298,8 @@ export function createPaginatedStoreActions<T, P extends CursorParams>(
         set({
           data: result.data as T[],
           cursorState: {
-            nextCursor: result.nextCursor,
-            nextIdAfter: result.nextIdAfter,
+            nextCursor: result.nextCursor ?? undefined,
+            nextIdAfter: result.nextIdAfter ?? undefined,
             hasNext: result.hasNext == undefined ? false : result.hasNext,
             totalCount: result.totalCount == undefined ? 0 : result.totalCount,
           },
@@ -336,8 +336,8 @@ export function createPaginatedStoreActions<T, P extends CursorParams>(
         set({
           data: [...data, ...result.data as T[]],
           cursorState: {
-            nextCursor: result.nextCursor,
-            nextIdAfter: result.nextIdAfter,
+            nextCursor: result.nextCursor ?? undefined,
+            nextIdAfter: result.nextIdAfter ?? undefined,
             hasNext: result.hasNext == undefined ? false : result.hasNext,
             totalCount: result.totalCount == undefined ? 0 : result.totalCount,
           },

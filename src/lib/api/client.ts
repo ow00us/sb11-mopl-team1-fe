@@ -143,10 +143,13 @@ apiClient.interceptors.response.use(
     }
 
     // Transform error to standardized format
+    // 응답이 없는 경우(네트워크 오류·타임아웃·CORS)에는 서버 ErrorResponse가 없으므로
+    // 클라이언트에서 만들어 채웁니다. 서버 코드(COMMON_*)와 구분되는 값을 씁니다.
     const errorResponse: ErrorResponse = error.response?.data || {
       exceptionName: error.name,
       message: error.message,
       details: {},
+      errorCode: 'CLIENT_NETWORK_ERROR',
     };
 
     if (error.response) {
