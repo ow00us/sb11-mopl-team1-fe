@@ -9,6 +9,7 @@ import EmptyState from './components/EmptyState';
 import type { DirectMessageDto } from '@/lib/types';
 import {markDirectMessageAsRead} from "@/lib/api";
 import useConversationStore from "@/lib/stores/useConversationStore.ts";
+import { featureFlags } from '@/lib/config/features';
 
 export default function ConversationsPage() {
   const navigate = useNavigate();
@@ -22,7 +23,7 @@ export default function ConversationsPage() {
 
   // WebSocket connection and subscription
   useEffect(() => {
-    if (!selectedConversationId || !authentication) return;
+    if (!featureFlags.directMessageSend || !selectedConversationId || !authentication) return;
 
     const accessToken = authentication.accessToken;
 
@@ -91,7 +92,7 @@ export default function ConversationsPage() {
           <MessageThread
             conversationId={selectedConversationId}
             onSendMessage={handleSendMessage}
-            isConnected={isConnected && !isConnecting}
+            isConnected={featureFlags.directMessageSend && isConnected && !isConnecting}
           />
         ) : (
           <EmptyState />

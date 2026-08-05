@@ -18,6 +18,8 @@ import {
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
 import type { NotificationDto } from '@/lib/types';
+import { featureFlags } from '@/lib/config/features';
+import { clearClientSession } from '@/lib/api/init';
 
 export default function GNB() {
   const { toggleSideMenu } = useUIStore();
@@ -37,7 +39,7 @@ export default function GNB() {
   }, []);
 
   useEffect(() => {
-    if (!authentication?.accessToken) return;
+    if (!featureFlags.sse || !authentication?.accessToken) return;
 
     const setupSSE = async () => {
       // Connect to SSE if not already connected
@@ -61,6 +63,7 @@ export default function GNB() {
   }, [authentication, isConnected, connect, subscribe, unsubscribe]);
 
   const handleLogout = async () => {
+    clearClientSession();
     await signOut();
     navigate('/sign-in');
   };

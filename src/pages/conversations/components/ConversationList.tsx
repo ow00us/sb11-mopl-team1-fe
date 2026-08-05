@@ -6,6 +6,7 @@ import { getConversationById } from '@/lib/api/conversations';
 import ConversationItem from './ConversationItem';
 import icSearch from '@/assets/ic_search.svg';
 import type { DirectMessageDto } from '@/lib/types';
+import { featureFlags } from '@/lib/config/features';
 
 interface ConversationListProps {
   selectedConversationId?: string;
@@ -30,6 +31,8 @@ export default function ConversationList({ selectedConversationId, onSelectConve
 
   // Subscribe to direct messages SSE
   useEffect(() => {
+    if (!featureFlags.sse) return;
+
     subscribe('direct-messages', async (message: DirectMessageDto) => {
       const { conversationId } = message;
       const currentConversations = useConversationStore.getState().data;

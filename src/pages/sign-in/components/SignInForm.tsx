@@ -10,6 +10,7 @@ import { toAbsoluteApiUrl } from '@/lib/config/env';
 import { useState } from 'react';
 import googleIcon from '@/assets/ic_google.svg';
 import kakaoIcon from '@/assets/ic_kakao.svg';
+import { featureFlags } from '@/lib/config/features';
 
 interface SignInFormData {
   email: string;
@@ -127,42 +128,45 @@ export default function SignInForm() {
         </Button>
       </div>
 
-      {/* Password Reset Link */}
-      <div className="flex w-full justify-center text-center text-body2-m text-gray-500">
-        <Link to="/reset-password" className="hover:text-gray-400">
-          비밀번호를 잊으셨나요?
-        </Link>
-      </div>
+      {featureFlags.passwordReset && (
+        <div className="flex w-full justify-center text-center text-body2-m text-gray-500">
+          <Link to="/reset-password" className="hover:text-gray-400">
+            비밀번호를 잊으셨나요?
+          </Link>
+        </div>
+      )}
 
-      {/* Social Login Divider */}
-      <div className="relative flex items-center gap-3 py-6">
-        <div className="h-px flex-1 bg-[#212126]" />
-        <span className="text-body2-m text-[#565666]">or</span>
-        <div className="h-px flex-1 bg-[#212126]" />
-      </div>
+      {featureFlags.oauth && (
+        <>
+          <div className="relative flex items-center gap-3 py-6">
+            <div className="h-px flex-1 bg-[#212126]" />
+            <span className="text-body2-m text-[#565666]">or</span>
+            <div className="h-px flex-1 bg-[#212126]" />
+          </div>
 
-      {/* Social Login Buttons */}
-      <div className="flex w-full flex-col gap-5">
-        <button
-          type="button"
-          onClick={handleGoogleLogin}
-          disabled={isLoading}
-          className="flex h-[56px] w-full items-center justify-center gap-1 rounded-[200px] bg-[rgba(35,35,43,0.5)] text-body2-sb text-[#dfdfe2] transition-colors hover:bg-[rgba(45,45,53,0.5)] disabled:opacity-50"
-        >
-          <img src={googleIcon} alt="" className="size-5" />
-          구글로 시작하기
-        </button>
+          <div className="flex w-full flex-col gap-5">
+            <button
+              type="button"
+              onClick={handleGoogleLogin}
+              disabled={isLoading}
+              className="flex h-[56px] w-full items-center justify-center gap-1 rounded-[200px] bg-[rgba(35,35,43,0.5)] text-body2-sb text-[#dfdfe2] transition-colors hover:bg-[rgba(45,45,53,0.5)] disabled:opacity-50"
+            >
+              <img src={googleIcon} alt="" className="size-5" />
+              구글로 시작하기
+            </button>
 
-        <button
-          type="button"
-          onClick={handleKakaoLogin}
-          disabled={isLoading}
-          className="flex h-[56px] w-full items-center justify-center gap-1 rounded-[200px] bg-[rgba(35,35,43,0.5)] text-body2-sb text-[#dfdfe2] transition-colors hover:bg-[rgba(45,45,53,0.5)] disabled:opacity-50"
-        >
-          <img src={kakaoIcon} alt="" className="size-5" />
-          카카오 시작하기
-        </button>
-      </div>
+            <button
+              type="button"
+              onClick={handleKakaoLogin}
+              disabled={isLoading}
+              className="flex h-[56px] w-full items-center justify-center gap-1 rounded-[200px] bg-[rgba(35,35,43,0.5)] text-body2-sb text-[#dfdfe2] transition-colors hover:bg-[rgba(45,45,53,0.5)] disabled:opacity-50"
+            >
+              <img src={kakaoIcon} alt="" className="size-5" />
+              카카오 시작하기
+            </button>
+          </div>
+        </>
+      )}
     </form>
   );
 }
