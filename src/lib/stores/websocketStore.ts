@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 import { create } from 'zustand';
 import type { ErrorResponse } from '@/lib/types';
 import { API_BASE_URL } from '@/lib/config/env';
-import { isForbidden, isUnauthorized, parseStompErrorFrame } from '@/lib/realtime/stompError';
+import { isPermanentFailure, isUnauthorized, parseStompErrorFrame } from '@/lib/realtime/stompError';
 import useAuthStore from '@/lib/stores/useAuthStore';
 
 interface WebSocketState {

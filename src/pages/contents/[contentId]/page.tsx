@@ -11,6 +11,7 @@ import ChatInput from './components/ChatInput';
 import WatcherListItem from './components/WatcherListItem';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import type {ContentChatDto, WatchingSessionChange} from "@/lib/types";
+import { featureFlags } from '@/lib/config/features';
 
 export default function ContentDetailPage() {
   const { contentId } = useParams<{ contentId: string }>();
@@ -63,9 +64,11 @@ export default function ContentDetailPage() {
           }
         });
 
-        subscribe(`/sub/contents/${contentId}/chat`, (message: ContentChatDto) => {
-          addMessage(message);
-        });
+        if (featureFlags.contentChat) {
+          subscribe(`/sub/contents/${contentId}/chat`, (message: ContentChatDto) => {
+            addMessage(message);
+          });
+        }
       } catch (error) {
         console.error('WebSocket setup failed:', error);
       } finally {
@@ -78,7 +81,9 @@ export default function ContentDetailPage() {
     // 페이지 이탈 시 구독 해제
     return () => {
       unsubscribe(`/sub/contents/${contentId}/watch`);
-      unsubscribe(`/sub/contents/${contentId}/chat`);
+      if (featureFlags.contentChat) {
+        unsubscribe(`/sub/contents/${contentId}/chat`);
+      }
       clearMessages();
     };
   }, [contentId, authentication, isConnected, connect, subscribe, unsubscribe, addMessage, clearMessages, fetchWatchingSessions]);
@@ -136,45 +141,43 @@ export default function ContentDetailPage() {
         </div>
       </div>
 
-      {/* 중앙: 실시간 채팅 - 가변 너비 (남은 공간 차지) */}
-      <div className="flex-1 min-w-0 h-auto lg:h-full flex items-stretch justify-center p-4 lg:py-20 lg:px-8">
-        <div className="w-full h-full flex flex-col backdrop-blur-[25px] bg-[rgba(46,46,56,0.4)] border border-[#212126] rounded-2xl overflow-hidden">
-          {/* 채팅 헤더 */}
-          <div className="px-10 pt-[30px] pb-[10px]">
-            <div className="flex items-center gap-1.5">
-              <h2 className="text-title1-b text-gray-50">실시간 채팅</h2>
-              <div className="flex items-center gap-1">
-                <div className="w-4 h-4 rounded-full bg-pink-500" />
-                <span className="text-body3-b text-gray-400">
-                  {watchers.length.toLocaleString()}
-                </span>
+      {featureFlags.contentChat && (
+        <div className="flex-1 min-w-0 h-auto lg:h-full flex items-stretch justify-center p-4 lg:py-20 lg:px-8">
+          <div className="w-full h-full flex flex-col backdrop-blur-[25px] bg-[rgba(46,46,56,0.4)] border border-[#212126] rounded-2xl overflow-hidden">
+            <div className="px-10 pt-[30px] pb-[10px]">
+              <div className="flex items-center gap-1.5">
+                <h2 className="text-title1-b text-gray-50">실시간 채팅</h2>
+                <div className="flex items-center gap-1">
+                  <div className="w-4 h-4 rounded-full bg-pink-500" />
+                  <span className="text-body3-b text-gray-400">
+                    {watchers.length.toLocaleString()}
+                  </span>
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* 채팅 메시지 영역 */}
-          <div ref={chatContainerRef} className="flex-1 overflow-y-auto px-10 py-[10px]">
-            {messages.length === 0 ? (
-              <div className="flex items-center justify-center h-full">
-                <p className="text-body2-m text-gray-500">
-                  채팅 메시지가 없습니다.
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-[10px]">
-                {messages.map((message, index) => (
-                  <ChatMessage key={index} message={message} />
-                ))}
-              </div>
-            )}
-          </div>
+            <div ref={chatContainerRef} className="flex-1 overflow-y-auto px-10 py-[10px]">
+              {messages.length === 0 ? (
+                <div className="flex items-center justify-center h-full">
+                  <p className="text-body2-m text-gray-500">
+                    채팅 메시지가 없습니다.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-[10px]">
+                  {messages.map((message, index) => (
+                    <ChatMessage key={index} message={message} />
+                  ))}
+                </div>
+              )}
+            </div>
 
-          {/* 채팅 입력 */}
-          <div className="px-10 py-[10px]">
-            <ChatInput onSendMessage={handleSendMessage} disabled={!isConnected} />
+            <div className="px-10 py-[10px]">
+              <ChatInput onSendMessage={handleSendMessage} disabled={!isConnected} />
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* 우측: 시청자 목록 - 비율 기반 (약 15-20%) */}
       <div className="w-full lg:w-[18%] lg:min-w-[220px] lg:max-w-[270px] h-auto lg:h-full overflow-y-auto lg:border-l border-t lg:border-t-0 border-gray-800 shrink-0">

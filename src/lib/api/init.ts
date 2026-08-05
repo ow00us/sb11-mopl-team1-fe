@@ -4,12 +4,20 @@
  * Connects the API client with the auth store to enable:
  * - Automatic JWT token injection
  * - CSRF token handling
- * - Automatic token refresh on 401 errors
+ * - Local authentication and realtime cleanup on 401 errors
  */
 
 import { setTokenGetters } from './client';
 import { useAuthStore } from '@/lib/stores/useAuthStore';
-import { getCsrfTokenFromCookie, refreshToken } from './auth';
+import { getCsrfTokenFromCookie } from './auth';
+import { useSseStore } from '@/lib/stores/sseStore';
+import { useWebSocketStore } from '@/lib/stores/websocketStore';
+
+export const clearClientSession = () => {
+  useWebSocketStore.getState().disconnect();
+  useSseStore.getState().disconnect();
+  useAuthStore.getState().clear();
+};
 
 /**
  * Initialize API client with auth store integration
@@ -24,11 +32,13 @@ export const initializeApiClient = () => {
     // Get CSRF token from cookie
     () => getCsrfTokenFromCookie(),
 
-    // Handle token refresh
-    async () => {
-      const newTokenData = await refreshToken();
-      useAuthStore.getState().update(newTokenData);
-      return newTokenData.accessToken;
+    // Refresh API가 준비되기 전에는 401을 재로그인 경계로 사용합니다.
+    () => {
+      clearClientSession();
+
+      if (window.location.hash !== '#/sign-in') {
+        window.location.replace('#/sign-in');
+      }
     },
   );
 };

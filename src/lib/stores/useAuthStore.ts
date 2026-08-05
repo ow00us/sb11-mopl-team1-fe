@@ -1,11 +1,13 @@
 import { create } from 'zustand';
 import type { JwtDto } from '@/lib/types';
-import {getCsrfToken, refreshToken, signIn, signOut} from '@/lib/api/auth';
-import type { BaseStore } from './types';
-import {execute} from "@/lib/stores/utils";
-import {createBaseStoreActions} from "@/lib/stores/actions.ts";
+import { getCsrfToken, signIn as requestSignIn } from '@/lib/api/auth';
 
-interface AuthStore extends BaseStore<JwtDto, unknown> {
+interface AuthStore {
+  data: JwtDto | null;
+  loading: boolean;
+  error?: string;
+  update: (data: Partial<JwtDto>) => void;
+  clear: () => void;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   isAuthenticated: () => boolean;
@@ -13,31 +15,43 @@ interface AuthStore extends BaseStore<JwtDto, unknown> {
 }
 
 export const useAuthStore = create<AuthStore>((set, get) => ({
-  ...createBaseStoreActions({
-    set, get,
-    fetchApi: refreshToken,
-  }),
+  data: null,
+  loading: false,
+  error: undefined,
+
+  update: (newData) => {
+    set((state) => ({
+      data: state.data ? { ...state.data, ...newData } : null,
+    }));
+  },
+
+  clear: () => {
+    set({ data: null, loading: false, error: undefined });
+  },
+
   signIn: async (email: string, password: string) => {
-    await execute(
-        set, get,
-        () => signIn({ email, password }),
-        {
-          shouldThrow: true
-        }
-    )
+    set({ loading: true, error: undefined });
+
+    try {
+      const data = await requestSignIn({ email, password });
+      set({ data });
+    } catch (error) {
+      set({ error: (error as Error).message || '로그인에 실패했습니다.' });
+      throw error;
+    } finally {
+      set({ loading: false });
+    }
   },
 
   signOut: async () => {
-    await execute(
-        set, get,
-        signOut,
-        {
-          onSuccess: (_result, _set, get) => {
-            get().clear();
-            getCsrfToken();
-          },
-        }
-    )
+    // 서버 sign-out API가 준비되기 전에는 액세스 토큰을 로컬에서 즉시 폐기합니다.
+    get().clear();
+
+    try {
+      await getCsrfToken();
+    } catch (error) {
+      console.error('Failed to renew CSRF token after sign-out:', error);
+    }
   },
 
   isAuthenticated: () => {

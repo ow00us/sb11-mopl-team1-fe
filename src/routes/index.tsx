@@ -23,6 +23,7 @@ import AdminUsersPage from '@/pages/admin/users/page';
 // Error Pages
 import NotFoundPage from '@/pages/not-found/page';
 import ProfileRoutePage from "@/pages/profiles/page.tsx";
+import { featureFlags } from '@/lib/config/features';
 
 export default function AppRoutes() {
   return (
@@ -31,7 +32,9 @@ export default function AppRoutes() {
         {/* Public Auth Routes */}
         <Route path="/sign-in" element={<SignInPage />} />
         <Route path="/sign-up" element={<SignUpPage />} />
-        <Route path="/reset-password" element={<ResetPasswordPage />} />
+        {featureFlags.passwordReset && (
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
+        )}
 
         {/* Protected Routes */}
         <Route element={<ProtectedRoute />}>
@@ -57,7 +60,9 @@ export default function AppRoutes() {
             <Route path="/conversations/:conversationId" element={<ConversationsPage />} />
 
             {/* Admin */}
-            <Route path="/admin/users" element={<AdminUsersPage />} />
+            {featureFlags.adminUsers && (
+              <Route path="/admin/users" element={<AdminUsersPage />} />
+            )}
           </Route>
         </Route>
 

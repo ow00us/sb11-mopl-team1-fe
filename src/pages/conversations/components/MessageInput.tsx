@@ -30,7 +30,7 @@ export default function MessageInput({ onSend, disabled = false }: MessageInputP
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="메시지 입력..."
+          placeholder={disabled ? '메시지 전송 준비 중' : '메시지 입력...'}
           disabled={disabled}
           className="w-full h-[54px] px-5 py-3.5 bg-gray-800/50 border-[1.5px] border-gray-800 rounded-xl text-body2-m-140 text-white placeholder:text-gray-400 focus:outline-none focus:border-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
         />
