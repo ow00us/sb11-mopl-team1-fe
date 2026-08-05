@@ -1,0 +1,26 @@
+# 의존성과 빌드 산출물 — 이미지 안에서 다시 만듭니다.
+node_modules
+dist
+dist-ssr
+
+# 버전 관리와 개발 환경
+.git
+.gitignore
+.gitattributes
+.idea
+.vscode
+.DS_Store
+
+# 문서 — 실행에 필요하지 않습니다.
+*.md
+
+# 로컬 환경 설정. .env.example 만 남겨도 빌드에 쓰이지 않습니다.
+.env
+.env.*
+
+# 이미지 자신을 빌드 컨텍스트에 넣지 않습니다.
+Dockerfile
+.dockerignore
+
+# 원본 백업
+package.json.bak
