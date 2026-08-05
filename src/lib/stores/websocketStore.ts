@@ -25,18 +25,12 @@ interface WebSocketState {
   send: (destination: string, body: unknown) => void;
 }
 
-/** 401 ERROR 프레임을 받았을 때 토큰을 새로 받아 재연결하는 횟수입니다. */
-const MAX_REAUTH_ATTEMPTS = 1;
-
 export const useWebSocketStore = create<WebSocketState>((set, get) => {
-  let reauthAttempts = 0;
-  let needsReauth = false;
-
   /**
    * 재연결을 멈추고 사유를 남깁니다.
    *
-   * 403 처럼 같은 요청을 반복해도 결과가 같은 경우에 씁니다. deactivate 하지 않으면
-   * stompjs 가 reconnectDelay 마다 같은 실패를 되풀이합니다.
+   * 403·404 처럼 같은 요청을 반복해도 결과가 같은 경우에 씁니다. deactivate 하지
+   * 않으면 stompjs 가 reconnectDelay 마다 같은 실패를 되풀이합니다.
    */
   const block = (client: Client, error: ErrorResponse) => {
     void client.deactivate();
@@ -63,8 +57,6 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => {
       if (isConnected || isConnecting) return Promise.resolve();
 
       set({ isConnecting: true, lastError: null, isBlocked: false });
-      reauthAttempts = 0;
-      needsReauth = false;
 
       const client = new Client({
         // 매번 새 SockJS 를 만들어야 합니다. 닫힌 소켓은 재사용할 수 없어서
@@ -80,27 +72,13 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => {
 
       // 재연결 시점의 토큰을 다시 읽습니다. connectHeaders 를 만들 때 잡아둔 토큰은
       // 그 사이 갱신되었더라도 그대로 남아 있어, 만료 후에는 계속 401 을 받습니다.
-      //
-      // 401 이후의 재발급도 여기서 기다립니다. stompjs 는 beforeConnect 의 Promise 가
-      // 끝날 때까지 연결을 열지 않으므로, onStompError 에서 발급을 시작하고 5초 뒤
-      // 자동 재연결이 이를 앞지르는 경합이 생기지 않습니다.
-      client.beforeConnect = async () => {
-        if (needsReauth) {
-          needsReauth = false;
-          try {
-            await useAuthStore.getState().fetch({ throwError: true });
-          } catch {
-            // 재발급이 실패하면 이어지는 401 에서 차단 처리합니다.
-          }
-        }
-
+      client.beforeConnect = () => {
         const currentToken = useAuthStore.getState().getAccessToken() ?? accessToken;
         client.connectHeaders = { Authorization: `Bearer ${currentToken}` };
       };
 
       return new Promise<void>((resolve, reject) => {
         client.onConnect = () => {
-          reauthAttempts = 0;
           set({
             stompClient: client,
             isConnected: true,
@@ -114,23 +92,18 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => {
         client.onStompError = (frame: IFrame) => {
           const error = parseStompErrorFrame(frame);
 
-          if (isForbidden(error)) {
+          if (isPermanentFailure(error)) {
             block(client, error);
             toast.error(error.message);
             reject(error);
             return;
           }
 
-          if (isUnauthorized(error) && reauthAttempts < MAX_REAUTH_ATTEMPTS) {
-            reauthAttempts += 1;
-            needsReauth = true;
-            set({ isConnected: false, isConnecting: true, lastError: error });
-            // 실제 재발급은 자동 재연결 직전 beforeConnect 에서 기다립니다.
-            return;
-          }
-
           if (isUnauthorized(error)) {
+            // 토큰 재발급 API 가 아직 없으므로 재연결로 해소할 방법이 없습니다.
+            // 로컬 인증 상태를 지워 화면이 재로그인을 요구하게 합니다.
             block(client, error);
+            useAuthStore.getState().clear();
             toast.error('실시간 연결 인증에 실패했습니다. 다시 로그인해 주세요.');
             reject(error);
             return;
@@ -142,7 +115,10 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => {
 
         client.onWebSocketClose = () => {
           if (get().isBlocked) return;
-          set({ isConnected: false, isConnecting: false });
+          // 재연결하면 서버는 구독이 없는 새 STOMP 세션을 만듭니다. Map 을 비우지
+          // 않으면 화면이 다시 subscribe 해도 이미 구독 중으로 보고 건너뛰어,
+          // 연결은 되었는데 메시지가 오지 않는 상태가 됩니다.
+          set({ isConnected: false, isConnecting: false, subscriptions: new Map() });
         };
 
         client.activate();

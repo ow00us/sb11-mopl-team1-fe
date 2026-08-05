@@ -17,6 +17,8 @@ export const STOMP_ERROR_CODE = {
   UNAUTHORIZED: 'COMMON_401_1',
   /** 허용되지 않은 목적지로 구독·송신했습니다. */
   FORBIDDEN: 'COMMON_403_1',
+  /** 대화 비참여자처럼 접근할 수 없는 리소스입니다. */
+  NOT_FOUND: 'COMMON_404_1',
   INTERNAL: 'COMMON_500_1',
 } as const;
 
@@ -57,11 +59,18 @@ export const parseStompErrorFrame = (frame: IFrame): ErrorResponse => {
 export const isUnauthorized = (error: ErrorResponse): boolean =>
   error.errorCode === STOMP_ERROR_CODE.UNAUTHORIZED;
 
+const PERMANENT_ERROR_CODES: readonly string[] = [
+  // 목적지가 계약에 없거나 브로커 목적지로 직접 송신한 경우입니다.
+  STOMP_ERROR_CODE.FORBIDDEN,
+  // DirectMessageAuthorizationInterceptor 가 대화 비참여자에게 보냅니다.
+  STOMP_ERROR_CODE.NOT_FOUND,
+];
+
 /**
  * 재시도해도 같은 결과가 나오는 오류입니다.
  *
- * 목적지가 계약에 없거나 사용자가 해당 리소스의 참여자가 아닌 경우이므로,
- * 재연결을 반복하면 5초마다 같은 실패를 되풀이할 뿐입니다.
+ * 권한이나 참여 자격 문제여서, 재연결을 반복하면 reconnectDelay 마다 같은
+ * 실패를 되풀이할 뿐입니다.
  */
-export const isForbidden = (error: ErrorResponse): boolean =>
-  error.errorCode === STOMP_ERROR_CODE.FORBIDDEN;
+export const isPermanentFailure = (error: ErrorResponse): boolean =>
+  PERMANENT_ERROR_CODES.includes(error.errorCode);
