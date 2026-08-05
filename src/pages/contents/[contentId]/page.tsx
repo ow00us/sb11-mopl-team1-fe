@@ -20,10 +20,10 @@ export default function ContentDetailPage() {
 
   // Stores
   const { data: content, loading: contentLoading, updateParams: updateContentParams, clear: clearContent } = useContentDetailStore();
-  const { data: watchingSessions, fetch: fetchWatchingSessions, updateParams: updateWatchingSessionParams, add: addWatchingSession, delete: removeWatchingSession } = useWatchingSessionStore();
+  const { data: watchingSessions, updateParams: updateWatchingSessionParams, add: addWatchingSession, delete: removeWatchingSession } = useWatchingSessionStore();
   const { messages, addMessage, clearMessages } = useChatMessageStore();
   const { connect, subscribe, unsubscribe, isConnected, send } = useWebSocketStore();
-  const { data: authentication } = useAuthStore();
+  const accessToken = useAuthStore((state) => state.data?.accessToken);
 
   // 콘텐츠 상세 페칭
   useEffect(() => {
@@ -43,8 +43,7 @@ export default function ContentDetailPage() {
 
   // WebSocket 연결 및 구독
   useEffect(() => {
-    if (!contentId || !authentication) return;
-    const accessToken = authentication.accessToken;
+    if (!contentId || !accessToken) return;
 
     const setupWebSocket = async () => {
       setIsConnecting(true);
@@ -86,7 +85,7 @@ export default function ContentDetailPage() {
       }
       clearMessages();
     };
-  }, [contentId, authentication, isConnected, connect, subscribe, unsubscribe, addMessage, clearMessages, fetchWatchingSessions]);
+  }, [contentId, accessToken, isConnected, connect, subscribe, unsubscribe, addMessage, clearMessages]);
 
   // 채팅 메시지 전송 핸들러
   const handleSendMessage = (message: string) => {
