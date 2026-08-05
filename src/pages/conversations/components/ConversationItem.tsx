@@ -57,10 +57,10 @@ export default function ConversationItem({ conversation, isSelected, onClick }: 
         <div className="flex items-center justify-between gap-5">
           <div className="flex items-center gap-1 min-w-0">
             <p className={`text-body3-m truncate ${hasUnread ? 'text-gray-50' : 'text-gray-400'}`}>
-              {conversation.lastestMessage?.content || '메시지 없음'}
+              {conversation.latestMessage?.content || '메시지 없음'}
             </p>
             <span className="text-caption1-m text-gray-500 whitespace-nowrap">
-              {conversation.lastestMessage ? formatTime(conversation.lastestMessage.createdAt) : ''}
+              {conversation.latestMessage ? formatTime(conversation.latestMessage.createdAt) : ''}
             </span>
           </div>
 

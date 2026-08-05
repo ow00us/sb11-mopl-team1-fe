@@ -9,7 +9,7 @@ import SearchBar from './components/SearchBar';
 import UserTable, { LoadingSkeleton } from './components/UserTable';
 import ConfirmDialog from '@/components/ui/confirm-dialog';
 
-type SortBy = 'name' | 'email' | 'createdAt' | 'isLocked' | 'role';
+type SortBy = 'name' | 'email' | 'createdAt' | 'locked' | 'role';
 
 interface ConfirmDialogState {
   open: boolean;

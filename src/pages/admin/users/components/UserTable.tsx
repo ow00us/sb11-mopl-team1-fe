@@ -11,7 +11,7 @@ import LockButton from './LockButton';
 import RoleToggle from './RoleToggle';
 import SortableHeader from './SortableHeader';
 
-type SortBy = 'name' | 'email' | 'createdAt' | 'isLocked' | 'role';
+type SortBy = 'name' | 'email' | 'createdAt' | 'locked' | 'role';
 
 interface UserTableProps {
   users: UserDto[];
@@ -75,7 +75,7 @@ function TableHeaderComponent({
         <TableHead className="w-[140px]">
           <SortableHeader
             label="계정 잠금"
-            sortKey="isLocked"
+            sortKey="locked"
             currentSortBy={sortBy}
             currentSortDirection={sortDirection}
             onSort={onSort}

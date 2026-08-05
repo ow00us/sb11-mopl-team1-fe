@@ -20,7 +20,7 @@ interface PlaylistSortDropdownProps {
 
 const SORT_OPTIONS: (SortOption & { value: string })[] = [
   { value: 'latest', label: '최신순', sortBy: 'updatedAt', sortDirection: 'DESCENDING' },
-  { value: 'popular', label: '구독순', sortBy: 'subscribeCount', sortDirection: 'DESCENDING' },
+  { value: 'popular', label: '구독순', sortBy: 'subscriberCount', sortDirection: 'DESCENDING' },
 ];
 
 export default function PlaylistSortDropdown({

@@ -40,7 +40,7 @@ export default function ConversationsPage() {
           // Add new message to store
           useDirectMessageStore.getState().add(message);
           markDirectMessageAsRead(selectedConversationId, message.id);
-          updateConversation(selectedConversationId, {lastestMessage: message, hasUnread: false});
+          updateConversation(selectedConversationId, {latestMessage: message, hasUnread: false});
         });
       } catch (error) {
         console.error('WebSocket setup failed:', error);

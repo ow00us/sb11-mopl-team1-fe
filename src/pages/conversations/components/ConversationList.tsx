@@ -42,7 +42,7 @@ export default function ConversationList({ selectedConversationId, onSelectConve
       if (existingConversation) {
         // Update existing conversation with new message
         useConversationStore.getState().update(conversationId, {
-          lastestMessage: message,
+          latestMessage: message,
           hasUnread: selectedConversationId !== conversationId, // Only mark unread if not selected
         });
       } else {

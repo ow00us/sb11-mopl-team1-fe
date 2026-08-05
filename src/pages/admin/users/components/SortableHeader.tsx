@@ -2,7 +2,7 @@ import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { SortDirection } from '@/lib/types';
 
-type SortBy = 'name' | 'email' | 'createdAt' | 'isLocked' | 'role';
+type SortBy = 'name' | 'email' | 'createdAt' | 'locked' | 'role';
 
 interface SortableHeaderProps {
   label: string;
