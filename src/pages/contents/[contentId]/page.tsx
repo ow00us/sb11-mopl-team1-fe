@@ -57,9 +57,9 @@ export default function ContentDetailPage() {
         subscribe(`/sub/contents/${contentId}/watch`, (watchingSessionChange: WatchingSessionChange) => {
           // 시청자 입장/퇴장 이벤트 처리
           if (watchingSessionChange.type === 'JOIN') {
-            addWatchingSession(watchingSessionChange.watchingSession);
+            addWatchingSession(watchingSessionChange.watchingSessionDto);
           } else if (watchingSessionChange.type === 'LEAVE') {
-            removeWatchingSession(watchingSessionChange.watchingSession.id);
+            removeWatchingSession(watchingSessionChange.watchingSessionDto.id);
           }
         });
 

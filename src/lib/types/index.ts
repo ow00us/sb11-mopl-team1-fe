@@ -60,9 +60,16 @@ export type NotificationDto = components['schemas']['NotificationDto'];
 
 // Watching Session types
 export type WatchingSessionDto = components['schemas']['WatchingSessionDto'];
+/**
+ * `/sub/contents/{contentId}/watch` 로 방송되는 페이로드입니다.
+ *
+ * 서버 `WatchingSessionChange` 레코드의 컴포넌트 이름이 그대로 JSON 키가 되므로
+ * 필드명이 `watchingSessionDto` 입니다. STOMP 페이로드는 OpenAPI 스키마에 없어
+ * 생성 타입으로 검증되지 않으니, 서버 레코드가 바뀌면 여기도 함께 고쳐야 합니다.
+ */
 export type WatchingSessionChange = {
   type: 'JOIN' | 'LEAVE';
-  watchingSession: WatchingSessionDto;
+  watchingSessionDto: WatchingSessionDto;
   watcherCount: number;
 }
 
