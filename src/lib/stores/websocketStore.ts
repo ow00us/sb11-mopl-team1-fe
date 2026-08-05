@@ -3,6 +3,7 @@ import SockJS from 'sockjs-client';
 import { toast } from 'sonner';
 import { create } from 'zustand';
 import type { ErrorResponse } from '@/lib/types';
+import { API_BASE_URL } from '@/lib/config/env';
 import { isForbidden, isUnauthorized, parseStompErrorFrame } from '@/lib/realtime/stompError';
 import useAuthStore from '@/lib/stores/useAuthStore';
 
@@ -65,12 +66,10 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => {
       reauthAttempts = 0;
       needsReauth = false;
 
-      const BASE_URL = import.meta.env.VITE_PUBLIC_PATH || '';
-
       const client = new Client({
         // 매번 새 SockJS 를 만들어야 합니다. 닫힌 소켓은 재사용할 수 없어서
         // 인스턴스를 고정하면 재연결이 첫 시도에서 끊깁니다.
-        webSocketFactory: () => new SockJS(`${BASE_URL}/ws`),
+        webSocketFactory: () => new SockJS(`${API_BASE_URL}/ws`),
         connectHeaders: {
           Authorization: `Bearer ${accessToken}`,
         },

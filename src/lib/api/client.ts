@@ -11,12 +11,13 @@
 import axios, { AxiosError, type InternalAxiosRequestConfig } from 'axios';
 import type { ErrorResponse } from '@/lib/types';
 import useAuthStore from "@/lib/stores/useAuthStore.ts";
+import { API_BASE_URL } from '@/lib/config/env';
 
 /**
  * Base API client instance
  */
 export const apiClient = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || '',
+  baseURL: API_BASE_URL,
   timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
