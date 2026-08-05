@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
+import { toAbsoluteApiUrl } from '@/lib/config/env';
 import { useState } from 'react';
 import googleIcon from '@/assets/ic_google.svg';
 import kakaoIcon from '@/assets/ic_kakao.svg';
@@ -44,11 +45,9 @@ export default function SignInForm() {
     }
   };
 
-  const basename = import.meta.env.VITE_PUBLIC_PATH || '';
-
   const handleLogin = (provider: OAuthProvider) => {
-
-    window.location.href = `${window.location.origin}${basename}/oauth2/authorization/${provider}`
+    // OAuth2 인가 요청은 백엔드 엔드포인트로 브라우저를 직접 이동시킵니다.
+    window.location.href = toAbsoluteApiUrl(`/oauth2/authorization/${provider}`);
   }
 
   const handleGoogleLogin = () => {

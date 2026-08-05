@@ -1,5 +1,6 @@
 import {EventSourcePolyfill} from 'event-source-polyfill';
 import {create} from 'zustand';
+import { API_BASE_URL } from '@/lib/config/env';
 
 interface SseState {
   eventSource: EventSource | null;
@@ -26,8 +27,7 @@ export const useSseStore = create<SseState>((set, get) => ({
 
     try {
       console.log('[SSE] Try to connect');
-      const BASE_URL = import.meta.env.VITE_PUBLIC_PATH || '';
-      const eventSource = new EventSourcePolyfill(`${BASE_URL}/api/sse`, {
+      const eventSource = new EventSourcePolyfill(`${API_BASE_URL}/api/sse`, {
         headers: {
           Authorization: `Bearer ${accessToken}`,
         },
