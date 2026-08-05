@@ -5,7 +5,7 @@ export interface BaseStore<T, P> {
   update: (newData: Partial<T>) => void;
 
   params: P;
-  updateParams: (newParams: Partial<P>, options?: Partial<{ignoreFetch: boolean}>) => void;
+  updateParams: (newParams: Partial<P>, options?: { autoFetch?: boolean }) => void;
 
   fetch: (options?: {
     throwError?: boolean;
@@ -31,7 +31,7 @@ export interface ListStore<T, P> {
   count: () => number;
 
   params: P;
-  updateParams: (newParams: Partial<P>, options?: Partial<{ignoreFetch: boolean}>) => void;
+  updateParams: (newParams: Partial<P>, options?: { autoFetch?: boolean }) => void;
 
   fetch: (options?: {
     throwError?: boolean;
@@ -55,7 +55,7 @@ export interface PaginatedStore<T, P extends CursorParams> {
   count: () => number;
 
   params: Omit<P, 'cursor' | 'idAfter'>;
-  updateParams: (newParams: Partial<Omit<P, 'cursor' | 'idAfter'>>, options?: Partial<{ignoreFetch: boolean}>) => void;
+  updateParams: (newParams: Partial<Omit<P, 'cursor' | 'idAfter'>>, options?: { autoFetch?: boolean }) => void;
 
   cursorState: CursorState;
   hasNext: () => boolean;
