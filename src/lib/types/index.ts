@@ -49,6 +49,11 @@ export type DirectMessageDto = components['schemas']['DirectMessageDto'];
 // Follow types
 export type FollowDto = components['schemas']['FollowDto'];
 export type FollowRequest = components['schemas']['FollowRequest'];
+export type FollowerCountResponse = components['schemas']['FollowerCountResponse'];
+export type FollowUserItemDto = components['schemas']['FollowUserItemDto'];
+
+// Playlist subscriber types
+export type SubscriberItemDto = components['schemas']['SubscriberItemDto'];
 
 // Notification types
 export type NotificationDto = components['schemas']['NotificationDto'];
@@ -70,6 +75,8 @@ export type CursorResponseConversationDto = components['schemas']['CursorRespons
 export type CursorResponseDirectMessageDto = components['schemas']['CursorResponseDirectMessageDto'];
 export type CursorResponseNotificationDto = components['schemas']['CursorResponseNotificationDto'];
 export type CursorResponseWatchingSessionDto = components['schemas']['CursorResponseWatchingSessionDto'];
+export type CursorResponseFollowUserItemDto = components['schemas']['CursorResponseFollowUserItemDto'];
+export type CursorResponseSubscriberItemDto = components['schemas']['CursorResponseSubscriberItemDto'];
 
 export type CursorResponse =
     CursorResponseUserDto
@@ -79,7 +86,9 @@ export type CursorResponse =
     | CursorResponseConversationDto
     | CursorResponseDirectMessageDto
     | CursorResponseNotificationDto
-    | CursorResponseWatchingSessionDto;
+    | CursorResponseWatchingSessionDto
+    | CursorResponseFollowUserItemDto
+    | CursorResponseSubscriberItemDto;
 
 
 // Error types
@@ -121,6 +130,14 @@ export type GetNotificationsParams = operations['getNotifications']['parameters'
 export type FindWatchingSessionsByContentParams =
   operations['findWatchingSessionsByContent']['parameters']['query'];
 
+// Follow query params
+export type GetFollowersParams = operations['getFollowers']['parameters']['query'];
+export type GetFollowingsParams = operations['getFollowings']['parameters']['query'];
+
+// Playlist subscriber query params
+export type GetPlaylistSubscribersParams =
+  operations['getPlaylistSubscribers']['parameters']['query'];
+
 export type CursorParams =
     FindUsersParams
     | FindContentsParams
@@ -129,4 +146,7 @@ export type CursorParams =
     | FindConversationsParams
     | FindDmsParams
     | GetNotificationsParams
-    | FindWatchingSessionsByContentParams;
+    | FindWatchingSessionsByContentParams
+    | GetFollowersParams
+    | GetFollowingsParams
+    | GetPlaylistSubscribersParams;

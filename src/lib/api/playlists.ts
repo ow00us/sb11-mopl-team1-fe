@@ -13,7 +13,9 @@ import type {
   PlaylistCreateRequest,
   PlaylistUpdateRequest,
   CursorResponsePlaylistDto,
+  CursorResponseSubscriberItemDto,
   FindPlaylistsParams,
+  GetPlaylistSubscribersParams,
 } from '@/lib/types';
 
 /**
@@ -131,4 +133,23 @@ export const removeContentFromPlaylist = async (
   contentId: string,
 ): Promise<void> => {
   await apiClient.delete(`/api/playlists/${playlistId}/contents/${contentId}`);
+};
+
+/**
+ * Get playlist subscribers with cursor pagination (플레이리스트 구독자 목록 조회)
+ * GET /api/playlists/{playlistId}/subscribers
+ *
+ * @param playlistId - Playlist ID
+ * @param params - Cursor pagination options
+ * @returns Paginated list of subscribers
+ */
+export const getPlaylistSubscribers = async (
+  playlistId: string,
+  params: GetPlaylistSubscribersParams,
+): Promise<CursorResponseSubscriberItemDto> => {
+  const response = await apiClient.get<CursorResponseSubscriberItemDto>(
+    `/api/playlists/${playlistId}/subscribers`,
+    { params },
+  );
+  return response.data;
 };

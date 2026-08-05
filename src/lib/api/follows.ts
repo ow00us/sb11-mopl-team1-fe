@@ -9,7 +9,14 @@
 
 import { isAxiosError } from 'axios';
 import apiClient from './client';
-import type { FollowDto, FollowRequest } from '@/lib/types';
+import type {
+  CursorResponseFollowUserItemDto,
+  FollowDto,
+  FollowRequest,
+  FollowerCountResponse,
+  GetFollowersParams,
+  GetFollowingsParams,
+} from '@/lib/types';
 
 /**
  * Follow user (팔로우)
@@ -62,10 +69,51 @@ export const isFollowedByMe = async (followeeId: string): Promise<FollowDto | nu
  *
  * @param followeeId - User ID to get follower count
  * @returns Follower count
+ *
+ * Note: 계약은 { count } 객체를 반환합니다. 호출부가 쓰는 형태는 숫자이므로
+ *       여기서 풀어서 넘깁니다.
  */
 export const getFollowerCount = async (followeeId: string): Promise<number> => {
-  const response = await apiClient.get<number>('/api/follows/count', {
+  const response = await apiClient.get<FollowerCountResponse>('/api/follows/count', {
     params: { followeeId },
   });
+  return response.data.count;
+};
+
+/**
+ * Get followers with cursor pagination (특정 유저의 팔로워 목록 조회)
+ * GET /api/follows/followers
+ *
+ * @param params - followeeId and cursor pagination options
+ * @returns Paginated list of followers
+ *
+ * Note: 응답 아이템의 user 는 팔로워입니다.
+ */
+export const getFollowers = async (
+  params: GetFollowersParams,
+): Promise<CursorResponseFollowUserItemDto> => {
+  const response = await apiClient.get<CursorResponseFollowUserItemDto>(
+    '/api/follows/followers',
+    { params },
+  );
+  return response.data;
+};
+
+/**
+ * Get followings with cursor pagination (특정 유저가 팔로우하는 목록 조회)
+ * GET /api/follows/followings
+ *
+ * @param params - followerId and cursor pagination options
+ * @returns Paginated list of followings
+ *
+ * Note: 응답 아이템의 user 는 팔로우 대상입니다.
+ */
+export const getFollowings = async (
+  params: GetFollowingsParams,
+): Promise<CursorResponseFollowUserItemDto> => {
+  const response = await apiClient.get<CursorResponseFollowUserItemDto>(
+    '/api/follows/followings',
+    { params },
+  );
   return response.data;
 };

@@ -8,7 +8,8 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "generate:api-types": "openapi-typescript api.json -o src/lib/types/api.ts"
+    "generate:api-types": "openapi-typescript api.json -o src/lib/types/api.ts",
+    "check:contract": "node scripts/check-api-contract.js"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
