@@ -14,6 +14,7 @@ import {
 import { MoreVertical } from 'lucide-react';
 import { deleteReview } from '@/lib/api/reviews';
 import useReviewStore from '@/lib/stores/useReviewStore';
+import { refreshContentDetail } from '@/lib/stores/useContentDetailStore';
 import { useAuthStore } from '@/lib/stores/useAuthStore';
 import type { ReviewDto } from '@/lib/types';
 import icX from '@/assets/ic_X.svg';
@@ -87,7 +88,10 @@ export default function ReviewListDialog({
       // 2. 스토어 동기화
       useReviewStore.getState().delete(deletingReviewId);
 
-      // 3. 다이얼로그 닫기
+      // 3. 평점·리뷰 수는 콘텐츠 상세에서 오므로 함께 갱신합니다.
+      await refreshContentDetail(contentId);
+
+      // 4. 다이얼로그 닫기
       setDeletingReviewId(null);
     } catch (err) {
       console.error('Failed to delete review:', err);
