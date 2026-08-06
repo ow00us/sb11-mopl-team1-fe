@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { createReview, updateReview } from '@/lib/api/reviews';
 import useReviewStore from '@/lib/stores/useReviewStore';
+import { refreshContentDetail } from '@/lib/stores/useContentDetailStore';
 import type { ReviewCreateRequest, ReviewUpdateRequest, ReviewDto} from '@/lib/types';
 import icArrowLeft from '@/assets/ic_arrow_left.svg';
 import icStarFull from '@/assets/ic_star_full.svg';
@@ -66,7 +67,10 @@ export default function ReviewWriteForm({
         useReviewStore.getState().add(newReview);
       }
 
-      // 3. 완료 처리
+      // 3. 평점·리뷰 수는 콘텐츠 상세에서 오므로 함께 갱신합니다.
+      await refreshContentDetail(contentId);
+
+      // 4. 완료 처리
       onComplete();
     } catch (err) {
       console.error('Failed to create/update review:', err);
