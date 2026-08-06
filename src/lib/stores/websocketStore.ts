@@ -25,7 +25,36 @@ interface WebSocketState {
   send: (destination: string, body: unknown) => void;
 }
 
+/**
+ * 구독 생명주기를 개발 환경에서만 기록합니다.
+ *
+ * 시청 세션 잔존 문제는 SUBSCRIBE 와 UNSUBSCRIBE 의 STOMP id 가 짝을 이루는지로
+ * 판별합니다. 프레임을 하나씩 펼쳐 보지 않고도 확인할 수 있게 남깁니다.
+ */
+const logSubscriptionFrame = (frame: 'SUBSCRIBE' | 'UNSUBSCRIBE', destination: string, id: string) => {
+  if (import.meta.env.DEV) {
+    console.debug(`[stomp] ${frame} id=${id} ${destination}`);
+  }
+};
+
 export const useWebSocketStore = create<WebSocketState>((set, get) => {
+  /**
+   * 진행 중인 연결입니다.
+   *
+   * 여러 화면이 동시에 connect 를 호출해도 같은 handshake 를 함께 기다리게 합니다.
+   * 연결이 끝나거나 실패하면 다시 null 이 됩니다.
+   */
+  let pendingConnect: Promise<void> | null = null;
+
+  /**
+   * 아직 연결이 끝나지 않은 클라이언트입니다.
+   *
+   * stompClient 는 onConnect 에서야 state 에 들어가므로, handshake 중에 disconnect
+   * 되면 state 만 보고는 이 인스턴스를 정리할 수 없습니다. 남겨두면 나중에 연결이
+   * 완료되어 주인 없는 구독과 시청 세션이 생깁니다.
+   */
+  let pendingClient: Client | null = null;
+
   /**
    * 재연결을 멈추고 사유를 남깁니다.
    *
@@ -34,6 +63,8 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => {
    */
   const block = (client: Client, error: ErrorResponse) => {
     void client.deactivate();
+    pendingConnect = null;
+    pendingClient = null;
     set({
       stompClient: null,
       isConnected: false,
@@ -53,8 +84,12 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => {
     isBlocked: false,
 
     connect: (accessToken: string) => {
-      const { isConnected, isConnecting } = get();
-      if (isConnected || isConnecting) return Promise.resolve();
+      if (get().isConnected) return Promise.resolve();
+
+      // 연결 중이면 같은 handshake 를 기다립니다. 곧바로 resolve 하면 호출부가
+      // 아직 연결되지 않은 클라이언트에 subscribe 를 걸고, subscribe 는
+      // isConnected 가 false 라 조용히 반환해 구독이 유실됩니다.
+      if (pendingConnect) return pendingConnect;
 
       set({ isConnecting: true, lastError: null, isBlocked: false });
 
@@ -70,6 +105,8 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => {
         heartbeatOutgoing: 4000,
       });
 
+      pendingClient = client;
+
       // 재연결 시점의 토큰을 다시 읽습니다. connectHeaders 를 만들 때 잡아둔 토큰은
       // 그 사이 갱신되었더라도 그대로 남아 있어, 만료 후에는 계속 401 을 받습니다.
       client.beforeConnect = () => {
@@ -77,7 +114,7 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => {
         client.connectHeaders = { Authorization: `Bearer ${currentToken}` };
       };
 
-      return new Promise<void>((resolve, reject) => {
+      pendingConnect = new Promise<void>((resolve, reject) => {
         client.onConnect = () => {
           set({
             stompClient: client,
@@ -122,7 +159,12 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => {
         };
 
         client.activate();
+      }).finally(() => {
+        pendingConnect = null;
+        pendingClient = null;
       });
+
+      return pendingConnect;
     },
 
     disconnect: () => {
@@ -130,6 +172,11 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => {
       if (stompClient) {
         void stompClient.deactivate();
       }
+      if (pendingClient && pendingClient !== stompClient) {
+        void pendingClient.deactivate();
+      }
+      pendingConnect = null;
+      pendingClient = null;
       set({
         stompClient: null,
         isConnected: false,
@@ -151,6 +198,8 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => {
         callback(JSON.parse(message.body) as T);
       });
 
+      logSubscriptionFrame('SUBSCRIBE', destination, subscription.id);
+
       const next = new Map(subscriptions);
       next.set(destination, subscription);
       set({ subscriptions: next });
@@ -163,6 +212,8 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => {
       if (!subscription) return;
 
       subscription.unsubscribe();
+
+      logSubscriptionFrame('UNSUBSCRIBE', destination, subscription.id);
 
       const next = new Map(subscriptions);
       next.delete(destination);
