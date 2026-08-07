@@ -56,6 +56,24 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => {
   let pendingClient: Client | null = null;
 
   /**
+   * 화면이 요청해 둔 구독입니다. 실제 STOMP 구독과 별개로 유지합니다.
+   *
+   * 소켓이 닫히면 서버는 구독이 없는 새 STOMP 세션을 만들므로 살아 있는 구독
+   * 객체는 버려야 하지만, "무엇을 구독하고 싶은지" 는 남아 있어야 재연결 후
+   * 되살릴 수 있습니다. 화면은 재구독 시점을 알 수 없습니다. 구독 effect 는
+   * contentId·accessToken 이 바뀔 때만 다시 실행되는데, 재연결은 그 어느 것도
+   * 바꾸지 않기 때문입니다.
+   */
+  const desiredSubscriptions = new Map<string, (body: string) => void>();
+
+  /** 요청해 둔 구독을 현재 연결에 실제로 건다. */
+  const openSubscription = (client: Client, destination: string, handler: (body: string) => void) => {
+    const subscription = client.subscribe(destination, (message) => handler(message.body));
+    logSubscriptionFrame('SUBSCRIBE', destination, subscription.id);
+    return subscription;
+  };
+
+  /**
    * 재연결을 멈추고 사유를 남깁니다.
    *
    * 403·404 처럼 같은 요청을 반복해도 결과가 같은 경우에 씁니다. deactivate 하지
@@ -65,6 +83,8 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => {
     void client.deactivate();
     pendingConnect = null;
     pendingClient = null;
+    // 재연결로 해소되지 않는 상태이므로 요청해 둔 구독도 버립니다.
+    desiredSubscriptions.clear();
     set({
       stompClient: null,
       isConnected: false,
@@ -123,6 +143,17 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => {
             lastError: null,
             isBlocked: false,
           });
+
+          // 끊기기 전에 걸어둔 구독을 되살립니다. 첫 연결이면 목록이 비어 있어
+          // 아무 일도 일어나지 않고, 재연결이면 여기서 SUBSCRIBE 가 다시 나갑니다.
+          if (desiredSubscriptions.size > 0) {
+            const restored = new Map<string, StompSubscription>();
+            desiredSubscriptions.forEach((handler, destination) => {
+              restored.set(destination, openSubscription(client, destination, handler));
+            });
+            set({ subscriptions: restored });
+          }
+
           resolve();
         };
 
@@ -177,6 +208,9 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => {
       }
       pendingConnect = null;
       pendingClient = null;
+      // 명시적 종료이므로 요청해 둔 구독도 버립니다. 남겨두면 다음 로그인에서
+      // 화면이 요청하지도 않은 구독이 되살아납니다.
+      desiredSubscriptions.clear();
       set({
         stompClient: null,
         isConnected: false,
@@ -190,23 +224,26 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => {
     subscribe: <T,>(destination: string, callback: (message: T) => void) => {
       const { stompClient, isConnected, subscriptions } = get();
 
-      if (subscriptions.has(destination) || !isConnected || stompClient == null) {
-        return;
-      }
+      if (subscriptions.has(destination)) return;
 
-      const subscription = stompClient.subscribe(destination, (message) => {
-        callback(JSON.parse(message.body) as T);
-      });
+      // 연결 여부와 무관하게 요청은 기억해 둡니다. 연결 전에 호출되었더라도
+      // onConnect 가 이 목록을 보고 구독을 겁니다.
+      const handler = (body: string) => callback(JSON.parse(body) as T);
+      desiredSubscriptions.set(destination, handler);
 
-      logSubscriptionFrame('SUBSCRIBE', destination, subscription.id);
+      if (!isConnected || stompClient == null) return;
 
       const next = new Map(subscriptions);
-      next.set(destination, subscription);
+      next.set(destination, openSubscription(stompClient, destination, handler));
       set({ subscriptions: next });
     },
 
     unsubscribe: (destination: string) => {
       const { subscriptions } = get();
+
+      // 살아 있는 구독이 없어도 요청은 지웁니다. 끊긴 동안 화면을 벗어나면
+      // 구독 객체는 이미 버려졌는데 요청만 남아, 재연결 때 되살아납니다.
+      desiredSubscriptions.delete(destination);
 
       const subscription = subscriptions.get(destination);
       if (!subscription) return;
