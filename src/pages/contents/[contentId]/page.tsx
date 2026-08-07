@@ -41,51 +41,78 @@ export default function ContentDetailPage() {
     }
   }, [contentId, updateWatchingSessionParams]);
 
-  // WebSocket 연결 및 구독
+  // WebSocket 연결
+  //
+  // 구독과 분리해 둔다. 한 effect 에서 연결과 구독을 함께 처리하면 connect() 가 바꾼
+  // isConnected 때문에 그 effect 가 다시 실행되고, cleanup 의 unsubscribe 와 본문의
+  // subscribe 가 한 번 더 돌면서 서버가 LEAVE·JOIN 을 실제로 브로드캐스트한다.
   useEffect(() => {
-    if (!contentId || !accessToken) return;
+    if (!accessToken) return;
 
-    const setupWebSocket = async () => {
-      setIsConnecting(true);
+    let cancelled = false;
+    setIsConnecting(true);
 
-      try {
-        // 1. WebSocket이 연결되어 있지 않으면 연결
-        if (!isConnected) {
-          await connect(accessToken);
+    connect(accessToken)
+      .catch((error) => {
+        console.error('WebSocket connect failed:', error);
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsConnecting(false);
         }
+      });
 
-        subscribe(`/sub/contents/${contentId}/watch`, (watchingSessionChange: WatchingSessionChange) => {
-          // 시청자 입장/퇴장 이벤트 처리
-          if (watchingSessionChange.type === 'JOIN') {
-            addWatchingSession(watchingSessionChange.watchingSessionDto);
-          } else if (watchingSessionChange.type === 'LEAVE') {
-            removeWatchingSession(watchingSessionChange.watchingSessionDto.id);
-          }
-        });
-
-        if (featureFlags.contentChat) {
-          subscribe(`/sub/contents/${contentId}/chat`, (message: ContentChatDto) => {
-            addMessage(message);
-          });
-        }
-      } catch (error) {
-        console.error('WebSocket setup failed:', error);
-      } finally {
-        setIsConnecting(false);
-      }
+    return () => {
+      cancelled = true;
     };
+  }, [accessToken, connect]);
 
-    setupWebSocket();
+  // 시청 토픽·채팅 토픽 구독
+  //
+  // 연결이 끊긴 동안에는 아무것도 하지 않고 cleanup 도 남기지 않는다. 연결이 성립된
+  // 뒤 한 번만 구독하므로 입장당 JOIN 하나, 퇴장당 LEAVE 하나로 떨어진다.
+  // isConnected 를 의존성에 그대로 두는 이유는 재연결 때문이다. websocketStore 는
+  // 소켓이 닫히면 구독 Map 을 비우므로, 화면이 다시 구독해 주지 않으면 연결은
+  // 살아났는데 메시지가 오지 않는 상태가 된다.
+  useEffect(() => {
+    if (!contentId || !isConnected) return;
+
+    const watchDestination = `/sub/contents/${contentId}/watch`;
+    const chatDestination = `/sub/contents/${contentId}/chat`;
+
+    subscribe(watchDestination, (watchingSessionChange: WatchingSessionChange) => {
+      // 시청자 입장/퇴장 이벤트 처리
+      if (watchingSessionChange.type === 'JOIN') {
+        addWatchingSession(watchingSessionChange.watchingSessionDto);
+      } else if (watchingSessionChange.type === 'LEAVE') {
+        removeWatchingSession(watchingSessionChange.watchingSessionDto.id);
+      }
+    });
+
+    if (featureFlags.contentChat) {
+      subscribe(chatDestination, (message: ContentChatDto) => {
+        addMessage(message);
+      });
+    }
 
     // 페이지 이탈 시 구독 해제
     return () => {
-      unsubscribe(`/sub/contents/${contentId}/watch`);
+      unsubscribe(watchDestination);
       if (featureFlags.contentChat) {
-        unsubscribe(`/sub/contents/${contentId}/chat`);
+        unsubscribe(chatDestination);
       }
       clearMessages();
     };
-  }, [contentId, accessToken, isConnected, connect, subscribe, unsubscribe, addMessage, clearMessages]);
+  }, [
+    contentId,
+    isConnected,
+    subscribe,
+    unsubscribe,
+    addWatchingSession,
+    removeWatchingSession,
+    addMessage,
+    clearMessages,
+  ]);
 
   // 채팅 메시지 전송 핸들러
   const handleSendMessage = (message: string) => {
