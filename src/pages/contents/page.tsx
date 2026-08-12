@@ -6,11 +6,15 @@ import FilterTabs from './components/FilterTabs';
 import SearchBar from './components/SearchBar';
 import SortDropdown, { type SortOption } from './components/SortDropdown';
 import ContentGrid from './components/ContentGrid';
+import TagFilterButton from './components/TagFilterButton';
+import TagFilterPanel from './components/TagFilterPanel';
 
 export default function ContentsPage() {
-  const { data, loading, fetchMore, hasNext, updateParams } = useContentStore();
+  const { data, loading, fetchMore, hasNext, updateParams, count } = useContentStore();
   const [selectedType, setSelectedType] = useState<ContentType | 'ALL'>('ALL');
   const [sortValue, setSortValue] = useState('popular');
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [isTagFilterOpen, setIsTagFilterOpen] = useState(false);
 
   const { ref: sentinelRef, inView } = useInView({
     threshold: 0,
@@ -67,6 +71,15 @@ export default function ContentsPage() {
     [updateParams]
   );
 
+  // Handle tag filter change
+  const handleTagsChange = useCallback(
+    (tags: string[]) => {
+      setSelectedTags(tags);
+      updateParams({ tagsIn: tags.length > 0 ? tags : undefined });
+    },
+    [updateParams]
+  );
+
   return (
     <div className="flex flex-col gap-10 px-[70px] py-10">
       {/* Page Title */}
@@ -79,8 +92,18 @@ export default function ContentsPage() {
         <div className="flex items-center gap-2.5">
           <SearchBar onSearch={handleSearch} />
           <SortDropdown value={sortValue} onValueChange={handleSortChange} />
+          <TagFilterButton
+            isOpen={isTagFilterOpen}
+            hasSelection={selectedTags.length > 0}
+            onClick={() => setIsTagFilterOpen((prev) => !prev)}
+          />
         </div>
       </div>
+
+      {/* Tag Filter Panel */}
+      {isTagFilterOpen && (
+        <TagFilterPanel tags={selectedTags} onTagsChange={handleTagsChange} resultCount={count()} />
+      )}
 
       {/* Content Grid */}
       <ContentGrid contents={data} loading={loading} />
