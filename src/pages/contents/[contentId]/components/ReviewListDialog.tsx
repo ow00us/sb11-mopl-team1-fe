@@ -12,7 +12,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { MoreVertical } from 'lucide-react';
-import { deleteReview } from '@/lib/api/reviews';
+import { deleteReview, getMyReview } from '@/lib/api/reviews';
 import useReviewStore from '@/lib/stores/useReviewStore';
 import { refreshContentDetail } from '@/lib/stores/useContentDetailStore';
 import { useAuthStore } from '@/lib/stores/useAuthStore';
@@ -36,6 +36,7 @@ export default function ReviewListDialog({
   const [editingReview, setEditingReview] = useState<ReviewDto | null>(null);
   const [deletingReviewId, setDeletingReviewId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isCheckingReview, setIsCheckingReview] = useState(false);
   const { data, loading, fetch, fetchMore, hasNext, updateParams, clearData } = useReviewStore();
   const { ref: sentinelRef, inView } = useInView({
     threshold: 0,
@@ -105,6 +106,23 @@ export default function ReviewListDialog({
     setDeletingReviewId(null);
   };
 
+  const handleWriteClick = async () => {
+    setIsCheckingReview(true);
+    try {
+      const myReview = await getMyReview(contentId);
+      if (myReview) {
+        handleEdit(myReview);
+      } else {
+        setView('write');
+      }
+    } catch (err) {
+      console.error('Failed to check existing review:', err);
+      setView('write'); // 확인 실패 시에도 기존 동작(작성 화면)으로 진행
+    } finally {
+      setIsCheckingReview(false);
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
@@ -153,8 +171,9 @@ export default function ReviewListDialog({
 
             {/* 리뷰 작성 입력창 */}
             <button
-              onClick={() => setView('write')}
-              className="h-[54px] w-full bg-gray-800/50 border-[1.5px] border-gray-800 rounded-xl px-5 py-3.5 flex items-center mt-6 flex-shrink-0"
+              onClick={handleWriteClick}
+              disabled={isCheckingReview}
+              className="h-[54px] w-full bg-gray-800/50 border-[1.5px] border-gray-800 rounded-xl px-5 py-3.5 flex items-center mt-6 flex-shrink-0 disabled:opacity-50"
             >
               <span className="text-body2-m-140 text-gray-400">리뷰를 작성해주세요</span>
             </button>

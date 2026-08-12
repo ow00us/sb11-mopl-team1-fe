@@ -6,6 +6,7 @@
  * - Review CRUD operations
  */
 
+import { isAxiosError } from 'axios';
 import apiClient from './client';
 import type {
   ReviewDto,
@@ -57,6 +58,27 @@ export const updateReview = async (
 ): Promise<ReviewDto> => {
   const response = await apiClient.patch<ReviewDto>(`/api/reviews/${reviewId}`, data);
   return response.data;
+};
+
+/**
+ * Get my review for a content (내가 작성한 리뷰 조회)
+ * GET /api/reviews/me
+ *
+ * @param contentId - 콘텐츠 ID
+ * @returns 리뷰가 있으면 ReviewDto, 없으면 null
+ */
+export const getMyReview = async (contentId: string): Promise<ReviewDto | null> => {
+  try {
+    const response = await apiClient.get<ReviewDto>('/api/reviews/me', {
+      params: { contentId },
+    });
+    return response.data;
+  } catch (err) {
+    if (isAxiosError(err) && err.response?.status === 404) {
+      return null;
+    }
+    throw err;
+  }
 };
 
 /**
