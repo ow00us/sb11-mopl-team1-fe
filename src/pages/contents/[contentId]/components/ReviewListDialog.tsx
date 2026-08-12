@@ -19,6 +19,8 @@ import { useAuthStore } from '@/lib/stores/useAuthStore';
 import type { ReviewDto } from '@/lib/types';
 import icX from '@/assets/ic_X.svg';
 import icStarFull from '@/assets/ic_star_full.svg';
+import icStarHalf from '@/assets/ic_star_half.svg';
+import icStarEmpty from '@/assets/ic_star_empty.svg';
 import ReviewWriteForm from './ReviewWriteForm';
 
 interface ReviewListDialogProps {
@@ -246,12 +248,15 @@ function ReviewItem({ review, onEdit, onDelete }: ReviewItemProps) {
             {[1, 2, 3, 4, 5].map((star) => (
               <img
                 key={star}
-                src={icStarFull}
+                src={
+                  review.rating >= star
+                    ? icStarFull
+                    : review.rating >= star - 0.5
+                      ? icStarHalf
+                      : icStarEmpty
+                }
                 alt="star"
                 className="w-[18px] h-[18px]"
-                style={{
-                  opacity: star <= review.rating ? 1 : 0.3,
-                }}
               />
             ))}
           </div>
