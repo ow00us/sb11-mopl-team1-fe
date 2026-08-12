@@ -5,6 +5,7 @@ import { refreshContentDetail } from '@/lib/stores/useContentDetailStore';
 import type { ReviewCreateRequest, ReviewUpdateRequest, ReviewDto} from '@/lib/types';
 import icArrowLeft from '@/assets/ic_arrow_left.svg';
 import icStarFull from '@/assets/ic_star_full.svg';
+import icStarHalf from '@/assets/ic_star_half.svg';
 import icStarEmpty from '@/assets/ic_star_empty.svg';
 
 interface ReviewWriteFormProps {
@@ -97,11 +98,21 @@ export default function ReviewWriteForm({
         {[1, 2, 3, 4, 5].map((star) => (
           <button
             key={star}
-            onClick={() => setRating(star)}
+            onClick={(e) => {
+              const { left, width } = e.currentTarget.getBoundingClientRect();
+              const isLeftHalf = e.clientX - left < width / 2;
+              setRating(isLeftHalf ? star - 0.5 : star);
+            }}
             className="w-[60px] h-[60px] transition-opacity hover:opacity-80"
           >
             <img
-              src={star <= rating ? icStarFull : icStarEmpty}
+              src={
+                rating >= star
+                  ? icStarFull
+                  : rating >= star - 0.5
+                    ? icStarHalf
+                    : icStarEmpty
+              }
               alt={`${star}점`}
               className="w-full h-full"
             />
