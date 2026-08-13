@@ -26,6 +26,8 @@ export default function AddToPlaylistDialog({
   const [view, setView] = useState<'list' | 'create'>('list');
   const [userPlaylists, setUserPlaylists] = useState<PlaylistDto[]>([]);
   const [selectedPlaylistIds, setSelectedPlaylistIds] = useState<Set<string>>(new Set());
+  /** 이 콘텐츠를 이미 담고 있는 플레이리스트입니다. */
+  const [addedPlaylistIds, setAddedPlaylistIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
   const [adding, setAdding] = useState(false);
   const { data: jwt } = useAuthStore();
@@ -39,6 +41,7 @@ export default function AddToPlaylistDialog({
       setView('list');
       setUserPlaylists([]);
       setSelectedPlaylistIds(new Set());
+      setAddedPlaylistIds(new Set());
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, jwt?.userDto.id]);
@@ -55,14 +58,18 @@ export default function AddToPlaylistDialog({
         sortBy: 'updatedAt',
       });
 
-      // 이미 추가된 콘텐츠가 있는 플레이리스트 필터링
-      const notAddedPlaylists = response.data.filter((playlist) => {
-        const hasContent = playlist.contents.some((content) => content.id === contentId);
-        return !hasContent; // 콘텐츠가 없는 플레이리스트만 표시
-      });
+      // 이미 담긴 플레이리스트를 목록에서 빼지 않습니다. 새 플레이리스트를 만들면
+      // 그 자리에서 콘텐츠까지 추가되므로, 걸러내면 방금 만든 것이 사라져 생성이
+      // 실패한 것처럼 보입니다. 대신 체크된 상태로 구분해 보여줍니다.
+      const added = new Set(
+        response.data
+          .filter((playlist) => playlist.contents.some((content) => content.id === contentId))
+          .map((playlist) => playlist.id),
+      );
 
-      setUserPlaylists(notAddedPlaylists);
-      setSelectedPlaylistIds(new Set()); // 초기 선택 없음
+      setUserPlaylists(response.data);
+      setAddedPlaylistIds(added);
+      setSelectedPlaylistIds(added);
     } catch (err) {
       console.error('Failed to fetch playlists:', err);
       toast.error('플레이리스트를 불러오는데 실패했습니다.');
@@ -83,15 +90,20 @@ export default function AddToPlaylistDialog({
     });
   };
 
+  /** 이번에 새로 체크한 것만 보냅니다. 이미 담긴 것을 다시 보내면 서버가 중복 요청을 받습니다. */
+  const playlistIdsToAdd = Array.from(selectedPlaylistIds).filter(
+    (playlistId) => !addedPlaylistIds.has(playlistId),
+  );
+
   const handleAddToPlaylists = async () => {
     setAdding(true);
     try {
-      // 선택된 플레이리스트에 콘텐츠 추가
       await Promise.all(
-        Array.from(selectedPlaylistIds).map((playlistId) =>
-          addContentToPlaylist(playlistId, contentId)
-        )
+        playlistIdsToAdd.map((playlistId) => addContentToPlaylist(playlistId, contentId)),
       );
+
+      // 목록 화면이 스토어를 다시 조회하지 않고도 최신 개수를 보이도록 반영합니다.
+      syncPlaylistStore(playlistIdsToAdd);
 
       toast.success('플레이리스트에 추가되었습니다.');
       onOpenChange(false);
@@ -103,23 +115,58 @@ export default function AddToPlaylistDialog({
     }
   };
 
+  /** 추가한 플레이리스트의 스토어 사본에도 콘텐츠를 반영합니다. */
+  const syncPlaylistStore = (playlistIds: string[]) => {
+    const content = userPlaylists
+      .flatMap((playlist) => playlist.contents)
+      .find((item) => item.id === contentId);
+    if (!content) return;
+
+    const store = usePlaylistStore.getState();
+    for (const playlistId of playlistIds) {
+      const stored = store.data.find((playlist) => playlist.id === playlistId);
+      if (stored && !stored.contents.some((item) => item.id === contentId)) {
+        store.update(playlistId, { contents: [...stored.contents, content] });
+      }
+    }
+  };
+
   const handleCreatePlaylist = async (data: PlaylistCreateRequest) => {
+    let newPlaylist;
     try {
-      // 1. API 호출
-      const newPlaylist = await createPlaylist(data);
-
-      // 2. 스토어 동기화
-      usePlaylistStore.getState().add(newPlaylist);
-
-      // 3. 새로 생성된 플레이리스트에 콘텐츠 추가
-      await addContentToPlaylist(newPlaylist.id, contentId);
-
-      toast.success('플레이리스트가 생성되고 콘텐츠가 추가되었습니다.');
-      onOpenChange(false);
+      newPlaylist = await createPlaylist(data);
     } catch (err) {
       console.error('Failed to create playlist:', err);
       toast.error('플레이리스트 생성에 실패했습니다.');
+      return;
     }
+
+    try {
+      await addContentToPlaylist(newPlaylist.id, contentId);
+    } catch (err) {
+      // 생성은 끝난 뒤이므로 생성 실패로 알리면 사실과 다릅니다. 빈 플레이리스트가
+      // 남은 상태이니 목록으로 돌려보내 다시 시도할 수 있게 합니다.
+      console.error('Failed to add content to new playlist:', err);
+      usePlaylistStore.getState().add(newPlaylist);
+      toast.error('플레이리스트는 만들었지만 콘텐츠 추가에 실패했습니다.');
+      setView('list');
+      await fetchUserPlaylists();
+      return;
+    }
+
+    // 콘텐츠까지 담은 상태로 스토어에 넣습니다. 생성 응답만 넣으면 목록 화면에
+    // 콘텐츠 0개로 남습니다.
+    const contentInPlaylist = userPlaylists
+      .flatMap((playlist) => playlist.contents)
+      .find((item) => item.id === contentId);
+    usePlaylistStore.getState().add(
+      contentInPlaylist
+        ? { ...newPlaylist, contents: [...newPlaylist.contents, contentInPlaylist] }
+        : newPlaylist,
+    );
+
+    toast.success('플레이리스트가 생성되고 콘텐츠가 추가되었습니다.');
+    onOpenChange(false);
   };
 
   return (
@@ -132,6 +179,8 @@ export default function AddToPlaylistDialog({
           <PlaylistListView
             userPlaylists={userPlaylists}
             selectedPlaylistIds={selectedPlaylistIds}
+            addedPlaylistIds={addedPlaylistIds}
+            addableCount={playlistIdsToAdd.length}
             loading={loading}
             adding={adding}
             onCheckboxChange={handleCheckboxChange}
@@ -153,6 +202,8 @@ export default function AddToPlaylistDialog({
 interface PlaylistListViewProps {
   userPlaylists: PlaylistDto[];
   selectedPlaylistIds: Set<string>;
+  addedPlaylistIds: Set<string>;
+  addableCount: number;
   loading: boolean;
   adding: boolean;
   onCheckboxChange: (playlistId: string, isChecked: boolean) => void;
@@ -164,6 +215,8 @@ interface PlaylistListViewProps {
 function PlaylistListView({
   userPlaylists,
   selectedPlaylistIds,
+  addedPlaylistIds,
+  addableCount,
   loading,
   adding,
   onCheckboxChange,
@@ -191,7 +244,7 @@ function PlaylistListView({
           </div>
         ) : userPlaylists.length === 0 ? (
           <div className="flex items-center justify-center h-full">
-            <p className="text-body2-m text-gray-400">콘텐츠를 추가할 플레이리스트가 없습니다.</p>
+            <p className="text-body2-m text-gray-400">플레이리스트가 없습니다.</p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -200,6 +253,7 @@ function PlaylistListView({
                 key={playlist.id}
                 playlist={playlist}
                 checked={selectedPlaylistIds.has(playlist.id)}
+                alreadyAdded={addedPlaylistIds.has(playlist.id)}
                 onChange={(isChecked) => onCheckboxChange(playlist.id, isChecked)}
               />
             ))}
@@ -220,7 +274,7 @@ function PlaylistListView({
         {/* 추가 버튼 */}
         <button
           onClick={onAddToPlaylists}
-          disabled={adding || selectedPlaylistIds.size === 0}
+          disabled={adding || addableCount === 0}
           className="flex-1 h-[54px] bg-pink-600 rounded-xl px-5 py-3 hover:bg-pink-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <span className="text-body1-b text-white">
@@ -235,21 +289,35 @@ function PlaylistListView({
 interface PlaylistCheckboxItemProps {
   playlist: PlaylistDto;
   checked: boolean;
+  alreadyAdded: boolean;
   onChange: (checked: boolean) => void;
 }
 
-function PlaylistCheckboxItem({ playlist, checked, onChange }: PlaylistCheckboxItemProps) {
+function PlaylistCheckboxItem({
+  playlist,
+  checked,
+  alreadyAdded,
+  onChange,
+}: PlaylistCheckboxItemProps) {
   return (
-    <label className="flex items-center gap-2 py-2.5 px-1 cursor-pointer">
+    <label
+      className={`flex items-center gap-2 py-2.5 px-1 ${alreadyAdded ? 'cursor-default' : 'cursor-pointer'}`}
+    >
       <input
         type="checkbox"
         checked={checked}
+        // 이미 담긴 항목은 해제할 수 없습니다. 이 다이얼로그는 추가만 다루고,
+        // 제거는 플레이리스트 상세 화면의 역할입니다.
+        disabled={alreadyAdded}
         onChange={(e) => onChange(e.target.checked)}
-        className="w-5 h-5 rounded border-2 border-gray-600 bg-transparent checked:bg-pink-600 checked:border-pink-600 cursor-pointer appearance-none flex items-center justify-center after:content-['✓'] after:text-white after:text-sm after:hidden checked:after:block"
+        className="w-5 h-5 rounded border-2 border-gray-600 bg-transparent checked:bg-pink-600 checked:border-pink-600 cursor-pointer appearance-none flex items-center justify-center after:content-['✓'] after:text-white after:text-sm after:hidden checked:after:block disabled:cursor-default disabled:opacity-60"
       />
       <div className="flex-1">
-        <p className="text-body2-sb text-gray-100">{playlist.title}</p>
+        <p className={`text-body2-sb ${alreadyAdded ? 'text-gray-400' : 'text-gray-100'}`}>
+          {playlist.title}
+        </p>
       </div>
+      {alreadyAdded && <span className="text-caption1-m text-gray-500">추가됨</span>}
     </label>
   );
 }
