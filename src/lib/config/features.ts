@@ -19,9 +19,7 @@ export const featureFlags = {
   directMessageSend: true,
   // STOMP /pub/contents/{contentId}/watch/heartbeat
   //
-  // 아직 StompDestinationAuthorizationInterceptor 의 허용 목적지에 없습니다.
-  // 켜면 서버가 COMMON_403_1 ERROR 프레임을 보내고 연결을 닫으므로, 시청자
-  // 목록과 채팅까지 함께 끊깁니다. 목적지 허용과 만료 시각 정책이 백엔드에
-  // 병합된 뒤 켭니다.
-  watchHeartbeat: false,
+  // 백엔드 #216 으로 목적지 허용과 수신 처리가 들어갔습니다. 서버 설정의
+  // heartbeat-interval 은 20s 이며 FE 주기와 맞춰야 합니다.
+  watchHeartbeat: true,
 } as const;
