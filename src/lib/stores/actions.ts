@@ -333,8 +333,14 @@ export function createPaginatedStoreActions<T, P extends CursorParams>(
         const {params, data} = get();
         const result = await fetchApi({...params, cursor: cursorState.nextCursor, idAfter: cursorState.nextIdAfter} as P);
 
+        // 커서 경계에서 같은 항목이 다시 올 수 있습니다. 이어붙이기만 하면 목록에
+        // 중복이 남고, key 가 겹쳐 React 렌더링도 어긋납니다. 실시간으로 add 된
+        // 항목이 다음 페이지에 포함되는 경우도 같은 방식으로 걸러집니다.
+        const seen = new Set(data.map(keyExtractor));
+        const fresh = (result.data as T[]).filter(item => !seen.has(keyExtractor(item)));
+
         set({
-          data: [...data, ...result.data as T[]],
+          data: [...data, ...fresh],
           cursorState: {
             nextCursor: result.nextCursor ?? undefined,
             nextIdAfter: result.nextIdAfter ?? undefined,
