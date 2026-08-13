@@ -12,6 +12,7 @@ import WatcherListItem from './components/WatcherListItem';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import type {ContentChatDto, WatchingSessionChange} from "@/lib/types";
 import { featureFlags } from '@/lib/config/features';
+import { useWatchHeartbeat } from '@/lib/realtime/useWatchHeartbeat';
 
 export default function ContentDetailPage() {
   const { contentId } = useParams<{ contentId: string }>();
@@ -45,6 +46,8 @@ export default function ContentDetailPage() {
   }, [contentId, updateWatchingSessionParams, clearWatchingSessions]);
 
   // WebSocket 연결 및 구독
+  useWatchHeartbeat(contentId);
+
   useEffect(() => {
     if (!contentId || !accessToken) return;
 

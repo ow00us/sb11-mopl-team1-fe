@@ -1,6 +1,5 @@
 import { Client, type IFrame, type StompSubscription } from '@stomp/stompjs';
 import SockJS from 'sockjs-client';
-import { toast } from 'sonner';
 import { create } from 'zustand';
 import type { ErrorResponse } from '@/lib/types';
 import { toAbsoluteApiUrl } from '@/lib/config/env';
@@ -161,23 +160,28 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => {
           const error = parseStompErrorFrame(frame);
 
           if (isPermanentFailure(error)) {
+            // 사용자에게는 화면이 isBlocked 를 읽어 알립니다. toast 로 띄우면
+            // 재연결이 불가능한 상태인데도 안내가 사라져, 남은 화면만으로는
+            // 왜 동작하지 않는지 알 수 없습니다.
+            console.debug('[stomp] 영구 실패로 재연결을 중단합니다:', error);
             block(client, error);
-            toast.error(error.message);
             reject(error);
             return;
           }
 
           if (isUnauthorized(error)) {
-            // 토큰 재발급 API 가 아직 없으므로 재연결로 해소할 방법이 없습니다.
-            // 로컬 인증 상태를 지워 화면이 재로그인을 요구하게 합니다.
+            // 인증 실패는 재연결로 해소되지 않습니다. 로컬 인증 상태를 지워
+            // 화면이 재로그인을 요구하게 합니다.
+            console.debug('[stomp] 인증 실패로 재연결을 중단합니다:', error);
             block(client, error);
             useAuthStore.getState().clear();
-            toast.error('실시간 연결 인증에 실패했습니다. 다시 로그인해 주세요.');
             reject(error);
             return;
           }
 
           // 그 밖의 오류는 일시적일 수 있어 stompjs 의 자동 재연결에 맡깁니다.
+          // 재연결 과정은 사용자에게 알리지 않고 로그로만 남깁니다.
+          console.debug('[stomp] 일시 오류. 자동 재연결에 맡깁니다:', error);
           set({ isConnected: false, isConnecting: false, lastError: error });
         };
 
