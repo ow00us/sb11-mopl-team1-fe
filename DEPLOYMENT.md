@@ -24,8 +24,19 @@ Dockerfile은 Vite 빌드 단계와 Nginx 실행 단계를 분리합니다. 실�
 | 변수 | 설명 |
 | --- | --- |
 | `BACKEND_UPSTREAM` | 프록시 대상 백엔드 주소. 기본값 `http://mopl-app:8080` |
+| `NGINX_RESOLVER` | 백엔드 주소를 다시 조회할 DNS 서버. 기본값 `127.0.0.11` |
 
-컨테이너 기동 시 Nginx 공식 이미지의 entrypoint가 `nginx.conf.template`의 `${BACKEND_UPSTREAM}`을 치환합니다.
+컨테이너 기동 시 Nginx 공식 이미지의 entrypoint가 `nginx.conf.template`의 `${BACKEND_UPSTREAM}`과 `${NGINX_RESOLVER}`를 치환합니다.
+
+`BACKEND_UPSTREAM`은 **끝에 `/`를 두지 않습니다.** 설정이 원본 URI를 직접 이어 붙이므로 슬래시가 겹칩니다.
+
+### 백엔드 주소 재조회
+
+`proxy_pass`에 호스트명을 직접 쓰면 Nginx는 기동 시점에 한 번만 DNS를 조회하고 그 주소를 계속 사용합니다. 백엔드 컨테이너나 ECS task를 새로 만들면 주소가 바뀌는데 Nginx는 옛 주소로 보내 `502`가 이어집니다.
+
+그래서 `resolver`와 변수 형태의 `proxy_pass`를 함께 사용해 요청 시점에 다시 조회합니다. `valid=10s`로 짧게 캐시해 매 요청마다 조회하지는 않습니다.
+
+`NGINX_RESOLVER` 기본값은 Docker 내장 DNS인 `127.0.0.11`입니다. ECS에서는 해당 VPC의 resolver 주소를 지정합니다.
 
 빌드 시점 값인 `VITE_API_BASE_URL`과 `VITE_PUBLIC_PATH`는 Dockerfile에서 빈 값으로 고정합니다. 동일 origin 배포가 아닌 구성이 필요하면 별도 이슈에서 다룹니다.
 
