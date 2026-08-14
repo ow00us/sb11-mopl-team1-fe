@@ -4,7 +4,7 @@
 # 프론트엔드 JavaScript 가 읽을 수 있습니다. 백엔드는 다른 호스트에 두면
 # host-only 쿠키라 document.cookie 로 접근할 수 없습니다.
 #
-# BACKEND_UPSTREAM 은 컨테이너 기동 시 envsubst 로 치환합니다.
+# BACKEND_UPSTREAM 과 NGINX_RESOLVER 는 컨테이너 기동 시 envsubst 로 치환합니다.
 
 map $http_upgrade $connection_upgrade {
     default upgrade;
@@ -14,6 +14,18 @@ map $http_upgrade $connection_upgrade {
 server {
     listen 8080;
     server_name _;
+
+    # proxy_pass 에 호스트명을 직접 쓰면 Nginx 가 기동 시점에 한 번만 DNS 를
+    # 조회하고 그 주소를 계속 씁니다. 백엔드 컨테이너나 ECS task 를 새로 만들면
+    # 주소가 바뀌는데 Nginx 는 옛 주소로 보내 502 가 이어집니다.
+    #
+    # 아래 resolver 와 변수 형태의 proxy_pass 를 함께 쓰면 요청 시점에 다시
+    # 조회합니다. valid 로 짧게 캐시해 매 요청 조회를 피합니다.
+    resolver ${NGINX_RESOLVER} valid=10s ipv6=off;
+
+    # 변수를 쓰면 Nginx 가 location 접두사를 대신 붙여주지 않으므로 원본 URI 를
+    # 직접 이어 붙입니다. BACKEND_UPSTREAM 은 끝에 / 를 두지 않습니다.
+    set $backend_upstream ${BACKEND_UPSTREAM};
 
     root /usr/share/nginx/html;
     index index.html;
@@ -27,7 +39,7 @@ server {
     }
 
     location /api/ {
-        proxy_pass ${BACKEND_UPSTREAM};
+        proxy_pass $backend_upstream$request_uri;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
@@ -40,7 +52,7 @@ server {
     }
 
     location /oauth2/ {
-        proxy_pass ${BACKEND_UPSTREAM};
+        proxy_pass $backend_upstream$request_uri;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
@@ -51,7 +63,7 @@ server {
     # SockJS 는 WebSocket 외에 XHR polling 등으로 fallback 하므로 /ws 하위
     # 경로 전체를 넘깁니다. Upgrade 헤더는 WebSocket transport 에서만 채워집니다.
     location /ws {
-        proxy_pass ${BACKEND_UPSTREAM};
+        proxy_pass $backend_upstream$request_uri;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection $connection_upgrade;
