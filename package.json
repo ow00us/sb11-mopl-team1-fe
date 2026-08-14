@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
+    "generate:api-json": "node scripts/generate-api-json.js",
     "generate:api-types": "openapi-typescript api.json -o src/lib/types/api.ts",
     "check:contract": "node scripts/check-api-contract.js"
   },
@@ -52,6 +53,7 @@
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.22",
     "globals": "^16.4.0",
+    "js-yaml": "^5.2.3",
     "openapi-typescript": "^7.10.1",
     "tailwindcss": "^4.1.16",
     "typescript": "~5.9.3",
