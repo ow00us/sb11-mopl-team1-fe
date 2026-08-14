@@ -3,6 +3,8 @@ import {
   Dialog,
   DialogContent,
   DialogClose,
+  DialogTitle,
+  DialogDescription,
 } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { getPlaylists, createPlaylist, addContentToPlaylist } from '@/lib/api/playlists';
@@ -228,7 +230,11 @@ function PlaylistListView({
     <div className="flex flex-col h-full">
       {/* 헤더 */}
       <div className="flex items-center justify-between pb-6">
-        <h2 className="text-title1-sb text-gray-300">플레이리스트 추가</h2>
+        <DialogTitle className="text-title1-sb text-gray-300">플레이리스트 추가</DialogTitle>
+        {/* 화면에는 제목만 두고, 스크린 리더에는 무엇을 하는 창인지 함께 알립니다. */}
+        <DialogDescription className="sr-only">
+          이 콘텐츠를 담을 플레이리스트를 고릅니다. 이미 담긴 항목은 체크된 채로 표시됩니다.
+        </DialogDescription>
         <DialogClose asChild>
           <button className="w-6 h-6" onClick={onClose}>
             <img src={icX} alt="닫기" className="w-full h-full" />
@@ -353,7 +359,10 @@ function CreatePlaylistView({ onBack, onCreate }: CreatePlaylistViewProps) {
         <button onClick={onBack} className="w-5 h-5">
           <img src={icArrowLeft} alt="뒤로가기" className="w-full h-full" />
         </button>
-        <h2 className="text-title1-sb text-gray-300">새 플레이리스트</h2>
+        <DialogTitle className="text-title1-sb text-gray-300">새 플레이리스트</DialogTitle>
+        <DialogDescription className="sr-only">
+          제목과 설명을 입력해 플레이리스트를 만들고 이 콘텐츠를 담습니다.
+        </DialogDescription>
       </div>
 
       {/* 제목 입력 */}

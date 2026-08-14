@@ -4,6 +4,8 @@ import {
   Dialog,
   DialogContent,
   DialogClose,
+  DialogTitle,
+  DialogDescription,
 } from '@/components/ui/dialog';
 import {
   DropdownMenu,
@@ -135,7 +137,11 @@ export default function ReviewListDialog({
           <>
             {/* 헤더 */}
             <div className="flex items-center justify-between pb-6 flex-shrink-0">
-              <h2 className="text-title1-sb text-gray-300">리뷰</h2>
+              <DialogTitle className="text-title1-sb text-gray-300">리뷰</DialogTitle>
+              {/* 화면에는 제목만 두고, 스크린 리더에는 무엇을 하는 창인지 함께 알립니다. */}
+              <DialogDescription className="sr-only">
+                이 콘텐츠의 리뷰 목록입니다. 내 리뷰를 쓰거나 고칠 수 있습니다.
+              </DialogDescription>
               <DialogClose asChild>
                 <button className="w-6 h-6">
                   <img src={icX} alt="닫기" className="w-full h-full" />

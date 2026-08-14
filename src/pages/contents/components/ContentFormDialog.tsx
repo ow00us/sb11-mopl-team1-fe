@@ -1,6 +1,6 @@
 import { useState, useEffect, type KeyboardEvent } from 'react';
 import { toast } from 'sonner';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -154,9 +154,13 @@ export default function ContentFormDialog({ mode, open, onOpenChange, initialDat
       <DialogContent hideCloseButton className="max-w-[520px] bg-gray-800/50 backdrop-blur-[25px] border border-gray-800 rounded-3xl p-9 max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-title1-sb text-gray-50">
+          <DialogTitle className="text-title1-sb text-gray-50">
             {mode === 'create' ? '콘텐츠 등록' : '콘텐츠 수정'}
-          </h2>
+          </DialogTitle>
+          {/* 화면에는 제목만 두고, 스크린 리더에는 무엇을 하는 창인지 함께 알립니다. */}
+          <DialogDescription className="sr-only">
+            썸네일, 제목, 설명, 유형, 태그를 입력합니다.
+          </DialogDescription>
           <button
             onClick={() => onOpenChange(false)}
             className="flex items-center justify-center w-8 h-8"
