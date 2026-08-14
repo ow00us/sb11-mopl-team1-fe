@@ -12,6 +12,7 @@ import WatcherListItem from './components/WatcherListItem';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import type {ContentChatDto, WatchingSessionChange} from "@/lib/types";
 import { featureFlags } from '@/lib/config/features';
+import { useWatchHeartbeat } from '@/lib/realtime/useWatchHeartbeat';
 
 export default function ContentDetailPage() {
   const { contentId } = useParams<{ contentId: string }>();
@@ -20,10 +21,10 @@ export default function ContentDetailPage() {
 
   // Stores
   const { data: content, loading: contentLoading, updateParams: updateContentParams, clear: clearContent } = useContentDetailStore();
-  const { data: watchingSessions, fetch: fetchWatchingSessions, updateParams: updateWatchingSessionParams, add: addWatchingSession, delete: removeWatchingSession } = useWatchingSessionStore();
+  const { data: watchingSessions, updateParams: updateWatchingSessionParams, add: addWatchingSession, delete: removeWatchingSession, clear: clearWatchingSessions } = useWatchingSessionStore();
   const { messages, addMessage, clearMessages } = useChatMessageStore();
   const { connect, subscribe, unsubscribe, isConnected, send } = useWebSocketStore();
-  const { data: authentication } = useAuthStore();
+  const accessToken = useAuthStore((state) => state.data?.accessToken);
 
   // 콘텐츠 상세 페칭
   useEffect(() => {
@@ -39,23 +40,37 @@ export default function ContentDetailPage() {
     if (contentId) {
       updateWatchingSessionParams({ contentId });
     }
-  }, [contentId, updateWatchingSessionParams]);
+
+    // 이탈 시 비우지 않으면 다음 진입까지 지난 시청자 목록이 화면에 남습니다.
+    return () => clearWatchingSessions();
+  }, [contentId, updateWatchingSessionParams, clearWatchingSessions]);
 
   // WebSocket 연결 및 구독
+  useWatchHeartbeat(contentId);
+
   useEffect(() => {
-    if (!contentId || !authentication) return;
-    const accessToken = authentication.accessToken;
+    if (!contentId || !accessToken) return;
+
+    const watchDestination = `/sub/contents/${contentId}/watch`;
+    const chatDestination = `/sub/contents/${contentId}/chat`;
+
+    // cleanup 이 끝난 뒤에 연결이 완료되면 짝이 되는 unsubscribe 가 없는 구독이
+    // 남습니다. 이탈 이후의 구독을 막습니다.
+    let cancelled = false;
 
     const setupWebSocket = async () => {
       setIsConnecting(true);
 
       try {
-        // 1. WebSocket이 연결되어 있지 않으면 연결
-        if (!isConnected) {
-          await connect(accessToken);
-        }
+        // 이미 연결돼 있으면 connect 가 곧바로 반환합니다. isConnected 를 의존성에
+        // 두면 연결 완료 시점에 cleanup → 재구독이 한 번 더 돌아, 한 번의 진입에서
+        // SUBSCRIBE → UNSUBSCRIBE → SUBSCRIBE 가 나가고 서버가 보는
+        // subscriptionId 가 바뀝니다.
+        await connect(accessToken);
 
-        subscribe(`/sub/contents/${contentId}/watch`, (watchingSessionChange: WatchingSessionChange) => {
+        if (cancelled) return;
+
+        subscribe(watchDestination, (watchingSessionChange: WatchingSessionChange) => {
           // 시청자 입장/퇴장 이벤트 처리
           if (watchingSessionChange.type === 'JOIN') {
             addWatchingSession(watchingSessionChange.watchingSessionDto);
@@ -65,28 +80,31 @@ export default function ContentDetailPage() {
         });
 
         if (featureFlags.contentChat) {
-          subscribe(`/sub/contents/${contentId}/chat`, (message: ContentChatDto) => {
+          subscribe(chatDestination, (message: ContentChatDto) => {
             addMessage(message);
           });
         }
       } catch (error) {
         console.error('WebSocket setup failed:', error);
       } finally {
-        setIsConnecting(false);
+        if (!cancelled) {
+          setIsConnecting(false);
+        }
       }
     };
 
-    setupWebSocket();
+    void setupWebSocket();
 
     // 페이지 이탈 시 구독 해제
     return () => {
-      unsubscribe(`/sub/contents/${contentId}/watch`);
+      cancelled = true;
+      unsubscribe(watchDestination);
       if (featureFlags.contentChat) {
-        unsubscribe(`/sub/contents/${contentId}/chat`);
+        unsubscribe(chatDestination);
       }
       clearMessages();
     };
-  }, [contentId, authentication, isConnected, connect, subscribe, unsubscribe, addMessage, clearMessages, fetchWatchingSessions]);
+  }, [contentId, accessToken, connect, subscribe, unsubscribe, addMessage, clearMessages]);
 
   // 채팅 메시지 전송 핸들러
   const handleSendMessage = (message: string) => {

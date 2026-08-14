@@ -3,6 +3,7 @@ import useDirectMessageStore from '@/lib/stores/useDirectMessageStore';
 import { useAuthStore } from '@/lib/stores/useAuthStore';
 import MessageBubble from './MessageBubble';
 import MessageInput from './MessageInput';
+import ConnectionBanner from './ConnectionBanner';
 import icProfileDefault from '@/assets/ic_profile_default.svg';
 import useConversationDetailStore from "@/lib/stores/useConversationDetailStore.ts";
 import {markDirectMessageAsRead} from "@/lib/api";
@@ -190,6 +191,7 @@ export default function MessageThread({ conversationId, onSendMessage, isConnect
       </div>
 
       {/* Input Area */}
+      <ConnectionBanner />
       <MessageInput onSend={onSendMessage} disabled={!isConnected} />
     </div>
   );

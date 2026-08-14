@@ -12,12 +12,15 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { MoreVertical } from 'lucide-react';
-import { deleteReview } from '@/lib/api/reviews';
+import { deleteReview, getMyReview } from '@/lib/api/reviews';
 import useReviewStore from '@/lib/stores/useReviewStore';
+import { refreshContentDetail } from '@/lib/stores/useContentDetailStore';
 import { useAuthStore } from '@/lib/stores/useAuthStore';
 import type { ReviewDto } from '@/lib/types';
 import icX from '@/assets/ic_X.svg';
 import icStarFull from '@/assets/ic_star_full.svg';
+import icStarHalf from '@/assets/ic_star_half.svg';
+import icStarEmpty from '@/assets/ic_star_empty.svg';
 import ReviewWriteForm from './ReviewWriteForm';
 
 interface ReviewListDialogProps {
@@ -35,6 +38,7 @@ export default function ReviewListDialog({
   const [editingReview, setEditingReview] = useState<ReviewDto | null>(null);
   const [deletingReviewId, setDeletingReviewId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isCheckingReview, setIsCheckingReview] = useState(false);
   const { data, loading, fetch, fetchMore, hasNext, updateParams, clearData } = useReviewStore();
   const { ref: sentinelRef, inView } = useInView({
     threshold: 0,
@@ -87,7 +91,10 @@ export default function ReviewListDialog({
       // 2. 스토어 동기화
       useReviewStore.getState().delete(deletingReviewId);
 
-      // 3. 다이얼로그 닫기
+      // 3. 평점·리뷰 수는 콘텐츠 상세에서 오므로 함께 갱신합니다.
+      await refreshContentDetail(contentId);
+
+      // 4. 다이얼로그 닫기
       setDeletingReviewId(null);
     } catch (err) {
       console.error('Failed to delete review:', err);
@@ -99,6 +106,23 @@ export default function ReviewListDialog({
 
   const handleDeleteCancel = () => {
     setDeletingReviewId(null);
+  };
+
+  const handleWriteClick = async () => {
+    setIsCheckingReview(true);
+    try {
+      const myReview = await getMyReview(contentId);
+      if (myReview) {
+        handleEdit(myReview);
+      } else {
+        setView('write');
+      }
+    } catch (err) {
+      console.error('Failed to check existing review:', err);
+      setView('write'); // 확인 실패 시에도 기존 동작(작성 화면)으로 진행
+    } finally {
+      setIsCheckingReview(false);
+    }
   };
 
   return (
@@ -149,8 +173,9 @@ export default function ReviewListDialog({
 
             {/* 리뷰 작성 입력창 */}
             <button
-              onClick={() => setView('write')}
-              className="h-[54px] w-full bg-gray-800/50 border-[1.5px] border-gray-800 rounded-xl px-5 py-3.5 flex items-center mt-6 flex-shrink-0"
+              onClick={handleWriteClick}
+              disabled={isCheckingReview}
+              className="h-[54px] w-full bg-gray-800/50 border-[1.5px] border-gray-800 rounded-xl px-5 py-3.5 flex items-center mt-6 flex-shrink-0 disabled:opacity-50"
             >
               <span className="text-body2-m-140 text-gray-400">리뷰를 작성해주세요</span>
             </button>
@@ -242,12 +267,15 @@ function ReviewItem({ review, onEdit, onDelete }: ReviewItemProps) {
             {[1, 2, 3, 4, 5].map((star) => (
               <img
                 key={star}
-                src={icStarFull}
+                src={
+                  review.rating >= star
+                    ? icStarFull
+                    : review.rating >= star - 0.5
+                      ? icStarHalf
+                      : icStarEmpty
+                }
                 alt="star"
                 className="w-[18px] h-[18px]"
-                style={{
-                  opacity: star <= review.rating ? 1 : 0.3,
-                }}
               />
             ))}
           </div>
