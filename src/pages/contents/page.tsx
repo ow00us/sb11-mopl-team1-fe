@@ -10,7 +10,7 @@ import TagFilterButton from './components/TagFilterButton';
 import TagFilterPanel from './components/TagFilterPanel';
 
 export default function ContentsPage() {
-  const { data, loading, fetchMore, hasNext, updateParams, count } = useContentStore();
+  const { data, loading, fetch, fetchMore, hasNext, updateParams, count } = useContentStore();
   const [selectedType, setSelectedType] = useState<ContentType | 'ALL'>('ALL');
   const [sortValue, setSortValue] = useState('popular');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
@@ -20,6 +20,11 @@ export default function ContentsPage() {
     threshold: 0,
     rootMargin: '100px',
   });
+
+  // 마운트 시 초기 목록 조회. SearchBar 의 debounce 부수효과에 기대지 않는다.
+  useEffect(() => {
+    fetch();
+  }, [fetch]);
 
   // Infinite scroll
   useEffect(() => {

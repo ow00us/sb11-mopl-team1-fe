@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import icSearch from '@/assets/ic_search.svg';
 
 interface SearchBarProps {
@@ -8,8 +8,15 @@ interface SearchBarProps {
 
 export default function SearchBar({ onSearch, placeholder = '검색어를 입력하세요' }: SearchBarProps) {
   const [value, setValue] = useState('');
+  // 마운트 시 빈 검색어를 debounce 로 흘려보내지 않는다.
+  // 페이지의 초기 목록 조회는 각 페이지가 useEffect 로 명시적으로 담당한다.
+  const isFirstRender = useRef(true);
 
   useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
     const timer = setTimeout(() => {
       onSearch(value);
     }, 300);
