@@ -8,7 +8,7 @@ import SortDropdown, { type SortOption } from './components/SortDropdown';
 import ContentGrid from './components/ContentGrid';
 
 export default function ContentsPage() {
-  const { data, loading, fetchMore, hasNext, updateParams } = useContentStore();
+  const { data, loading, fetch, fetchMore, hasNext, updateParams } = useContentStore();
   const [selectedType, setSelectedType] = useState<ContentType | 'ALL'>('ALL');
   const [sortValue, setSortValue] = useState('popular');
 
@@ -16,6 +16,11 @@ export default function ContentsPage() {
     threshold: 0,
     rootMargin: '100px',
   });
+
+  // 마운트 시 초기 목록 조회. SearchBar 의 debounce 부수효과에 기대지 않는다.
+  useEffect(() => {
+    fetch();
+  }, [fetch]);
 
   // Infinite scroll
   useEffect(() => {

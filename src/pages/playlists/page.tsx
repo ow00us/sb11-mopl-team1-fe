@@ -6,13 +6,18 @@ import PlaylistSortDropdown, { type SortOption } from './components/PlaylistSort
 import PlaylistGrid from './components/PlaylistGrid';
 
 export default function PlaylistsPage() {
-  const { data, loading, error, fetchMore, hasNext, updateParams } = usePlaylistStore();
+  const { data, loading, error, fetch, fetchMore, hasNext, updateParams } = usePlaylistStore();
   const [sortValue, setSortValue] = useState('latest');
 
   const { ref: sentinelRef, inView } = useInView({
     threshold: 0,
     rootMargin: '100px',
   });
+
+  // 마운트 시 초기 목록 조회. SearchBar 의 debounce 부수효과에 기대지 않는다.
+  useEffect(() => {
+    fetch();
+  }, [fetch]);
 
   // Infinite scroll
   useEffect(() => {
