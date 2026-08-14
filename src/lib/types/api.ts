@@ -64,6 +64,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/playlists/popular": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 인기 플레이리스트 랭킹 조회 (커서 페이지네이션)
+         * @description 구독자 수 기준으로 정렬된 인기 플레이리스트 목록을 커서 페이지네이션으로 조회합니다.
+         *     정렬은 `subscriber_count DESC → updated_at DESC → id DESC` 3단 tie-break 로 페이지 경계까지 안정적입니다.
+         *     인증 없이도 조회할 수 있으며, 인증 상태로 요청하면 응답의 `subscribedByMe` 가 채워집니다.
+         *
+         *     기존 `GET /api/playlists?sortBy=subscriberCount` 옵션은 하위 호환을 위해 유지되며, FE 이관 완료 후 별도 이슈로 제거를 검토합니다.
+         */
+        get: operations["findPopularPlaylists"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/playlists/{playlistId}/subscription": {
         parameters: {
             query?: never;
@@ -355,6 +379,26 @@ export interface paths {
          * @description [어드민 기능] 계정 잠금 상태를 변경합니다.
          */
         patch: operations["updateUser_Locked"];
+        trace?: never;
+    };
+    "/api/reviews/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 내 리뷰 조회
+         * @description 인증된 사용자가 특정 콘텐츠에 대해 본인이 작성한 리뷰를 조회합니다.
+         */
+        get: operations["getMyReview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/reviews/{reviewId}": {
@@ -1248,10 +1292,15 @@ export interface components {
              */
             level: "INFO" | "WARNING" | "ERROR";
             /**
-             * Format: date-time
-             * @description 알림을 읽은 시각. 읽지 않은 알림이면 null입니다.
+             * @description 알림 유형
+             * @enum {string|null}
              */
-            readAt?: string | null;
+            type?: "DIRECT_MESSAGE" | "FOLLOW" | "PLAYLIST_SUBSCRIPTION" | null;
+            /**
+             * Format: uuid
+             * @description 알림 클릭 시 이동할 대상 리소스 ID
+             */
+            resourceId?: string | null;
         };
         CursorResponseConversationDto: {
             /** @description 데이터 목록 */
@@ -1630,7 +1679,7 @@ export interface operations {
                 limit: number;
                 /** @description 정렬 방향 */
                 sortDirection: "ASCENDING" | "DESCENDING";
-                /** @description 정렬 기준 */
+                /** @description 정렬 기준. `subscriberCount` 는 인기 랭킹 전용 엔드포인트 `GET /api/playlists/popular` 로 이관 예정입니다. FE 이관이 완료되면 이 옵션은 제거됩니다. */
                 sortBy: "updatedAt" | "subscriberCount";
             };
             header?: never;
@@ -1728,6 +1777,51 @@ export interface operations {
             };
         };
     };
+    findPopularPlaylists: {
+        parameters: {
+            query: {
+                /** @description 커서 (subscriber_count 와 updated_at 을 인코딩한 값). idAfter 와 짝으로만 유효합니다. */
+                cursor?: string;
+                /** @description 보조 커서 (마지막 항목의 id). cursor 와 짝으로만 유효합니다. */
+                idAfter?: string;
+                /** @description 한 번에 가져올 개수 (1~100) */
+                limit: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 성공 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["CursorResponsePlaylistDto"];
+                };
+            };
+            /** @description 잘못된 요청 (limit 범위 밖 · cursor·idAfter 짝 불일치 · 잘못된 커서 형식) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 서버 오류 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     subscribePlaylist: {
         parameters: {
             query?: never;
@@ -1786,7 +1880,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 성공 */
+            /** @description 구독 취소 완료. 이미 취소 상태여도 성공 */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -1804,6 +1898,15 @@ export interface operations {
             };
             /** @description 인증 오류 */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 존재하지 않는 플레이리스트 */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2434,9 +2537,11 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 성공 */
+            /** @description 로그인 성공 */
             200: {
                 headers: {
+                    /** @description HttpOnly Refresh Token Cookie */
+                    "Set-Cookie"?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -2536,6 +2641,8 @@ export interface operations {
             /** @description 성공 */
             200: {
                 headers: {
+                    /** @description 교체된 HttpOnly Refresh Token Cookie */
+                    "Set-Cookie"?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -2744,6 +2851,15 @@ export interface operations {
                     "*/*": components["schemas"]["ErrorResponse"];
                 };
             };
+            /** @description 사용자를 찾을 수 없음 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description 서버 오류 */
             500: {
                 headers: {
@@ -2866,6 +2982,74 @@ export interface operations {
             };
             /** @description 권한 오류 */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 사용자를 찾을 수 없음 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 서버 오류 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getMyReview: {
+        parameters: {
+            query: {
+                /** @description 콘텐츠 ID */
+                contentId: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 성공 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ReviewDto"];
+                };
+            };
+            /** @description 잘못된 요청 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 인증 오류 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 찾을 수 없음 */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
