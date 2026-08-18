@@ -4,6 +4,7 @@ import {
   getCsrfToken,
   refreshToken as requestRefreshToken,
   signIn as requestSignIn,
+  signOut as requestSignOut,
 } from '@/lib/api/auth';
 
 /**
@@ -143,11 +144,36 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
 
   signOut: async () => {
     /*
-     * 서버 요청 결과와 관계없이 브라우저 메모리의 Access Token을
-     * 먼저 제거하여 로그아웃 직후 보호 API가 호출되지 않게 합니다.
+     * 서버 로그아웃 요청을 먼저 실행합니다.
+     *
+     * POST /api/auth/sign-out은 현재 Access Token을 이용해 사용자를
+     * 식별하고 Refresh Token 세션과 Cookie를 폐기합니다.
+     *
+     * 로컬 인증 상태를 먼저 지우면 요청 인터셉터가 Authorization
+     * 헤더를 만들 수 없으므로 서버 요청이 401로 실패할 수 있습니다.
      */
-    get().clear();
+    try {
+      await requestSignOut();
+    } catch (error) {
+      /*
+       * 서버가 일시적으로 응답하지 않더라도 브라우저 메모리의
+       * 인증 상태는 정리하여 사용자가 화면상 로그아웃할 수 있게 합니다.
+       *
+       * 서버 세션 폐기 실패 여부는 개발 로그에 남깁니다.
+       */
+      console.error('Failed to revoke server session during sign-out:', error);
+    } finally {
+      /*
+       * 서버 요청의 성공 여부와 관계없이 Access Token과 사용자 정보를
+       * 브라우저 메모리에서 제거합니다.
+       */
+      get().clear();
+    }
 
+    /*
+     * 로그아웃으로 인증 Cookie 상태가 변경된 뒤 이후 상태 변경 요청에서
+     * 사용할 CSRF Token을 새로 준비합니다.
+     */
     try {
       await getCsrfToken();
     } catch (error) {

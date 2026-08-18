@@ -35,8 +35,8 @@ export default function GNB() {
 
     return () => {
       clearNotifications();
-    }
-  }, []);
+    };
+  }, [fetchNotifications, clearNotifications]);
 
   useEffect(() => {
     if (!featureFlags.sse || !authentication?.accessToken) return;
@@ -63,8 +63,18 @@ export default function GNB() {
   }, [authentication, isConnected, connect, subscribe, unsubscribe]);
 
   const handleLogout = async () => {
-    clearClientSession();
+    /*
+     * 서버 로그아웃 요청에는 현재 Access Token이 필요하므로
+     * 로컬 인증 상태를 제거하기 전에 서버 요청을 먼저 실행합니다.
+     */
     await signOut();
+
+    /*
+     * 서버 로그아웃 처리 후 WebSocket과 SSE 등
+     * 사용자에게 연결된 실시간 클라이언트 상태를 정리합니다.
+     */
+    clearClientSession();
+
     navigate('/sign-in');
   };
 
