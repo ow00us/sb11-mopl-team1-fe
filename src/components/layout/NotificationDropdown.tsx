@@ -1,10 +1,12 @@
 import { useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import icInfo from '@/assets/ic_info.svg';
 import icWarning from '@/assets/ic_warning.svg';
 import icError from '@/assets/ic_error.svg';
 import useNotificationStore from '@/lib/stores/useNotificationStore';
 import { formatRelativeTime } from '@/lib/utils/time';
 import { markNotificationAsRead } from '@/lib/api/notifications';
+import { notificationRoute } from '@/lib/notifications/route';
 import type { NotificationDto, NotificationLevel } from '@/lib/types';
 
 interface NotificationDropdownProps {
@@ -36,16 +38,23 @@ function getNotificationIconBgColor(level: NotificationLevel): string {
 interface NotificationItemProps {
   notification: NotificationDto;
   onRead: (id: string) => void;
+  onNavigate: (path: string) => void;
 }
 
-function NotificationItem({ notification, onRead }: NotificationItemProps) {
+function NotificationItem({ notification, onRead, onNavigate }: NotificationItemProps) {
   const handleClick = async () => {
+    // 읽음 처리가 실패해도 이동은 막지 않습니다. 알림을 눌렀는데 화면이 그대로면
+    // 사용자는 무엇이 잘못됐는지 알 수 없습니다.
     try {
       await markNotificationAsRead(notification.id);
       onRead(notification.id);
     } catch (error) {
       console.error('Failed to mark notification as read:', error);
     }
+
+    // 모르는 유형이거나 대상이 없으면 읽음 처리만 하고 머무릅니다.
+    const path = notificationRoute(notification);
+    if (path) onNavigate(path);
   };
 
   return (
@@ -93,6 +102,13 @@ function NotificationItem({ notification, onRead }: NotificationItemProps) {
 
 export default function NotificationDropdown({ onClose }: NotificationDropdownProps) {
   const { data, loading, error, fetch, fetchMore, hasNext, count } = useNotificationStore();
+  const navigate = useNavigate();
+
+  // 이동하면 드롭다운은 닫습니다. 열린 채로 두면 옮겨간 화면을 가립니다.
+  const handleNotificationNavigate = (path: string) => {
+    navigate(path);
+    onClose();
+  };
   const dropdownRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -172,6 +188,7 @@ export default function NotificationDropdown({ onClose }: NotificationDropdownPr
                 key={notification.id}
                 notification={notification}
                 onRead={handleNotificationRead}
+                onNavigate={handleNotificationNavigate}
               />
             ))}
           </>
