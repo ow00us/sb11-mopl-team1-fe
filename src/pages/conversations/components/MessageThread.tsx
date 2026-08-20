@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import useDirectMessageStore from '@/lib/stores/useDirectMessageStore';
 import { useAuthStore } from '@/lib/stores/useAuthStore';
 import MessageBubble from './MessageBubble';
@@ -24,6 +24,10 @@ export default function MessageThread({ conversationId, onSendMessage, isConnect
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const isLoadingMoreRef = useRef(false);
+  /** 과거 메시지를 붙이기 직전의 스크롤 기준점입니다. 보정이 끝나면 비웁니다. */
+  const pendingRestoreRef = useRef<{ height: number; top: number } | null>(null);
+  /** 이번 렌더는 과거 메시지가 붙은 것이므로 맨 아래로 내리지 않습니다. */
+  const skipAutoScrollRef = useRef(false);
   const navigate = useNavigate();
 
   // Fetch messages when conversation changes
@@ -47,8 +51,31 @@ export default function MessageThread({ conversationId, onSendMessage, isConnect
     }
   }, [conversation]);
 
+  // 과거 메시지를 붙인 직후에는 위치를 되돌려야 합니다.
+  //
+  // 이전에는 fetchMore 뒤 requestAnimationFrame 안에서 보정했는데, 그 콜백은
+  // React 가 새 메시지를 DOM 에 반영하기 전에 실행됩니다. 그 시점의 scrollHeight
+  // 는 아직 이전 값이라 높이 차이가 0 으로 계산되고 위치가 그대로 남았습니다.
+  // useLayoutEffect 는 DOM 반영 뒤 화면에 그리기 전에 돌므로 깜빡임 없이 맞습니다.
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    const pending = pendingRestoreRef.current;
+    if (!container || !pending) return;
+
+    pendingRestoreRef.current = null;
+    container.scrollTop = pending.top + (container.scrollHeight - pending.height);
+
+    // 아래 자동 하단 스크롤 effect 가 이번 렌더에는 끼어들지 않게 합니다.
+    skipAutoScrollRef.current = true;
+    isLoadingMoreRef.current = false;
+  }, [messages]);
+
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
+    if (skipAutoScrollRef.current) {
+      skipAutoScrollRef.current = false;
+      return;
+    }
     if (messagesEndRef.current && !isLoadingMoreRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
@@ -66,22 +93,15 @@ export default function MessageThread({ conversationId, onSendMessage, isConnect
       if (scrollTop < 50 && hasNext() && !loading && !isLoadingMoreRef.current) {
         isLoadingMoreRef.current = true;
 
-        // Store current scroll height before loading more
-        const previousScrollHeight = container.scrollHeight;
+        // 붙기 전 기준점만 남깁니다. 실제 보정은 새 메시지가 DOM 에 반영된 뒤
+        // useLayoutEffect 에서 합니다.
+        pendingRestoreRef.current = { height: container.scrollHeight, top: scrollTop };
 
         try {
           await fetchMore();
-
-          // Restore scroll position after new messages are loaded
-          // This prevents the view from jumping to the top
-          requestAnimationFrame(() => {
-            const newScrollHeight = container.scrollHeight;
-            const heightDifference = newScrollHeight - previousScrollHeight;
-            container.scrollTop = scrollTop + heightDifference;
-            isLoadingMoreRef.current = false;
-          });
         } catch (error) {
           console.error('Failed to load more messages:', error);
+          pendingRestoreRef.current = null;
           isLoadingMoreRef.current = false;
         }
       }
