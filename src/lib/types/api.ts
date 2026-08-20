@@ -234,7 +234,7 @@ export interface paths {
         put?: never;
         /**
          * 로그아웃
-         * @description SecurityFilterChain에서 처리합니다.
+         * @description 현재 브라우저의 Refresh Token 세션을 폐기하고 Refresh Token Cookie를 삭제합니다.
          */
         post: operations["signOut"];
         delete?: never;
@@ -601,6 +601,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/follows/recommendations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 팔로우 추천 목록 조회 (친구의 친구 기반)
+         * @description 요청자가 팔로우 중인 사용자들이 팔로우하는 대상을 후보로, 공통 팔로잉 수(commonFollowingCount) DESC → userId DESC 정렬로 반환합니다. 자기 자신과 이미 팔로우한 사용자는 제외합니다.
+         */
+        get: operations["getFollowRecommendations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/conversations/{conversationId}": {
         parameters: {
             query?: never;
@@ -948,6 +968,16 @@ export interface components {
              */
             followedAt: string;
         };
+        /** @description 팔로우 추천 목록의 아이템. user 는 요청자에게 추천되는 사용자, commonFollowingCount 는 요청자와 겹치는 매개자 수. */
+        FollowRecommendationItemDto: {
+            /** @description 추천 대상 사용자 요약. 대응하는 사용자가 없으면 UNKNOWN fallback. */
+            user: components["schemas"]["UserSummary"];
+            /**
+             * Format: int64
+             * @description 요청자와 이 후보가 공통으로 팔로우하는 사용자 수. 클수록 취향 겹칠 가능성 높음.
+             */
+            commonFollowingCount: number;
+        };
         ConversationCreateRequest: {
             /**
              * Format: uuid
@@ -1050,7 +1080,10 @@ export interface components {
             accessToken: string;
         };
         ResetPasswordRequest: {
-            /** @description 임시 비밀번호를 발급받을 이메일 */
+            /**
+             * Format: email
+             * @description 임시 비밀번호를 발급받을 이메일
+             */
             email: string;
         };
         UserUpdateRequest: {
@@ -1215,6 +1248,31 @@ export interface components {
              * @enum {string}
              */
             sortDirection: "ASCENDING" | "DESCENDING";
+        };
+        CursorResponseFollowRecommendationItemDto: {
+            /** @description 팔로우 추천 목록 */
+            data: components["schemas"]["FollowRecommendationItemDto"][];
+            /** @description 다음 커서 (마지막 commonFollowingCount 를 Base64 로 인코딩) */
+            nextCursor?: string | null;
+            /**
+             * Format: uuid
+             * @description 다음 요청의 userId 타이브레이커
+             */
+            nextIdAfter?: string | null;
+            /** @description 다음 데이터가 있는지 여부 */
+            hasNext: boolean;
+            /**
+             * Format: int64
+             * @description 현재 페이지 데이터 개수. 추천은 무한 스크롤 UI 라 정확 집계 대신 페이지 크기로 대체.
+             */
+            totalCount: number;
+            /** @description 정렬 기준 */
+            sortBy: string;
+            /**
+             * @description 정렬 방향
+             * @enum {string}
+             */
+            sortDirection: "DESCENDING";
         };
         CursorResponseFollowUserItemDto: {
             /** @description 팔로워/팔로잉 목록 */
@@ -2493,19 +2551,42 @@ export interface operations {
             query?: never;
             header?: never;
             path?: never;
-            cookie?: never;
+            cookie?: {
+                /** @description 폐기할 현재 브라우저의 Refresh Token */
+                REFRESH_TOKEN?: string;
+            };
         };
         requestBody?: never;
         responses: {
-            /** @description 성공 */
+            /** @description 로그아웃 성공 */
             204: {
                 headers: {
+                    /** @description Refresh Token 삭제 Cookie */
+                    "Set-Cookie"?: string;
                     [name: string]: unknown;
                 };
                 content?: never;
             };
             /** @description 잘못된 요청 */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access Token이 없거나 유효하지 않음 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description CSRF 검증 실패 */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3866,6 +3947,61 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["CursorResponseFollowUserItemDto"];
+                };
+            };
+            /** @description 잘못된 요청 (파라미터 검증 실패, 잘못된 커서, cursor/idAfter 부정합) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 인증 오류 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 서버 오류 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getFollowRecommendations: {
+        parameters: {
+            query: {
+                /** @description 다음 페이지 커서 (마지막 commonFollowingCount 를 Base64 로 인코딩). idAfter 와 함께 제공해야 합니다. */
+                cursor?: string;
+                /** @description 같은 commonFollowingCount 값 내 userId 타이브레이커. cursor 와 함께 제공해야 합니다. */
+                idAfter?: string;
+                limit: number;
+                sortBy?: "commonFollowingCount";
+                sortDirection?: "DESCENDING";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 성공 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["CursorResponseFollowRecommendationItemDto"];
                 };
             };
             /** @description 잘못된 요청 (파라미터 검증 실패, 잘못된 커서, cursor/idAfter 부정합) */
