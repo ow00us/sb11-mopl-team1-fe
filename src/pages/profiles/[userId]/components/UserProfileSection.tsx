@@ -351,6 +351,18 @@ export default function UserProfileSection({userId}: {userId: string}) {
               )}
             </div>
 
+            {/* 본인에게만 로컬 로그인 이메일 연결 상태를 표시합니다. */}
+            {isOwnProfile && (
+                <div className="flex items-center gap-2 text-body3-m">
+                  <span className="text-gray-500">로그인 이메일</span>
+                  <span
+                      className={profile.email ? 'text-gray-300' : 'text-amber-400'}
+                  >
+                    {profile.email ?? '이메일 미연결'}
+                  </span>
+                </div>
+            )}
+
             {/* Follower Stats */}
             <div className="flex items-center gap-1">
               <span className="text-body1-m text-gray-300">팔로우</span>
