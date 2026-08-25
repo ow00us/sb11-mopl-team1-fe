@@ -37,6 +37,15 @@ const renderApp = () => {
   );
 };
 
+/*
+ * 공개 화면은 백엔드 상태와 관계없이 즉시 표시합니다.
+ *
+ * 인증이 필요한 화면은 ProtectedRoute가 isInitialized를 확인하여
+ * 복원 결과가 확정될 때까지 로딩 상태를 표시합니다. 따라서 CSRF 또는
+ * Refresh 요청이 지연되더라도 애플리케이션 전체가 빈 화면으로 남지 않습니다.
+ */
+renderApp();
+
 /**
  * 애플리케이션 최초 실행에 필요한 인증 환경을 준비합니다.
  *
@@ -44,7 +53,7 @@ const renderApp = () => {
  *
  * 1. 상태 변경 요청에 필요한 CSRF Token을 발급받습니다.
  * 2. HttpOnly Refresh Token Cookie를 이용해 인증 상태를 복원합니다.
- * 3. 인증 복원 시도가 끝난 뒤 React 애플리케이션을 렌더링합니다.
+ * 3. 인증 복원 결과를 Zustand에 반영합니다.
  *
  * Refresh Token 원문은 HttpOnly Cookie이므로 JavaScript에서 직접
  * 읽지 않습니다. 브라우저가 withCredentials 요청에 자동으로 포함합니다.
@@ -75,13 +84,6 @@ const bootstrap = async () => {
    */
   await useAuthStore.getState().restoreSession();
 
-  /*
-   * 인증 여부가 확정된 이후 화면을 렌더링합니다.
-   *
-   * 이를 먼저 렌더링하면 ProtectedRoute가 아직 복원되지 않은 data=null을
-   * 비로그인으로 오해하여 로그인 페이지로 이동시키는 화면 깜빡임이 발생합니다.
-   */
-  renderApp();
 };
 
 void bootstrap();

@@ -156,29 +156,28 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       await requestSignOut();
     } catch (error) {
       /*
-       * 서버가 일시적으로 응답하지 않더라도 브라우저 메모리의
-       * 인증 상태는 정리하여 사용자가 화면상 로그아웃할 수 있게 합니다.
-       *
-       * 서버 세션 폐기 실패 여부는 개발 로그에 남깁니다.
+       * HttpOnly Refresh Token Cookie는 JavaScript에서 직접 제거할 수 없습니다.
+       * 서버 폐기에 실패했는데 로컬 상태만 지우면 새로고침 시 기존 세션이
+       * 다시 복원될 수 있으므로 실패를 호출부에 전달하고 인증 상태를 유지합니다.
        */
       console.error('Failed to revoke server session during sign-out:', error);
-    } finally {
-      /*
-       * 서버 요청의 성공 여부와 관계없이 Access Token과 사용자 정보를
-       * 브라우저 메모리에서 제거합니다.
-       */
-      get().clear();
+      throw error;
     }
 
     /*
-     * 로그아웃으로 인증 Cookie 상태가 변경된 뒤 이후 상태 변경 요청에서
-     * 사용할 CSRF Token을 새로 준비합니다.
+     * 서버가 Refresh Token 세션과 Cookie를 폐기한 뒤에만
+     * 브라우저 메모리의 Access Token과 사용자 정보를 제거합니다.
      */
-    try {
-      await getCsrfToken();
-    } catch (error) {
+    get().clear();
+
+    /*
+     * 로그아웃으로 인증 Cookie 상태가 변경된 뒤 이후 상태 변경 요청에서
+     * 사용할 CSRF Token을 새로 준비합니다. 이 보조 요청은 로그아웃 완료와
+     * 실시간 연결 종료를 지연시키지 않도록 백그라운드에서 실행합니다.
+     */
+    void getCsrfToken().catch((error: unknown) => {
       console.error('Failed to renew CSRF token after sign-out:', error);
-    }
+    });
   },
 
   restoreSession: () => {

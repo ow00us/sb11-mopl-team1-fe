@@ -16,9 +16,13 @@ import { useWebSocketStore } from '@/lib/stores/websocketStore';
  * Refresh Token Cookie 자체의 폐기는 백엔드 로그아웃 API의 역할이고,
  * 여기서는 인증 복구에 실패한 클라이언트 상태를 정리합니다.
  */
-export const clearClientSession = () => {
+export const disconnectRealtimeClients = () => {
   useWebSocketStore.getState().disconnect();
   useSseStore.getState().disconnect();
+};
+
+export const clearClientSession = () => {
+  disconnectRealtimeClients();
   useAuthStore.getState().clear();
 };
 
