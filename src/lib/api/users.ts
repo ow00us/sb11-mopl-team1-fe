@@ -23,6 +23,8 @@ import type {
   OAuthAccountDto,
   OAuthLinkStartResponse,
   OAuthProvider,
+  LocalCredentialEmailVerificationRequest,
+  LocalCredentialRegistrationRequest,
 } from '@/lib/types';
 
 /**
@@ -192,4 +194,29 @@ export const unlinkOAuthAccount = async (
   await apiClient.delete(
     `/api/users/${userId}/oauth-accounts/${provider}`,
   );
+};
+
+/**
+ * OAuth 전용 사용자가 로컬 로그인 이메일 인증 코드를 요청합니다.
+ * POST /api/users/{userId}/local-credentials/email-verifications
+ */
+export const sendLocalCredentialEmailVerification = async (
+  userId: string,
+  data: LocalCredentialEmailVerificationRequest,
+): Promise<void> => {
+  await apiClient.post(
+    `/api/users/${userId}/local-credentials/email-verifications`,
+    data,
+  );
+};
+
+/**
+ * 인증한 이메일과 새 비밀번호를 로컬 로그인 수단으로 등록합니다.
+ * POST /api/users/{userId}/local-credentials
+ */
+export const registerLocalCredential = async (
+  userId: string,
+  data: LocalCredentialRegistrationRequest,
+): Promise<void> => {
+  await apiClient.post(`/api/users/${userId}/local-credentials`, data);
 };

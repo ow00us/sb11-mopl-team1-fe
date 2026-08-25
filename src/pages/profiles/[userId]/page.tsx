@@ -6,6 +6,8 @@ import SubscribedPlaylistSection
 import {Button} from "@/components/ui/button.tsx";
 import OAuthAccountSection
   from '@/pages/profiles/[userId]/components/OAuthAccountSection';
+import LocalCredentialSection
+  from '@/pages/profiles/[userId]/components/LocalCredentialSection';
 import useAuthStore from '@/lib/stores/useAuthStore';
 
 
@@ -14,6 +16,9 @@ export default function ProfilePage() {
   const navigate = useNavigate();
   const authenticatedUserId = useAuthStore(
     (state) => state.data?.userDto.id,
+  );
+  const authenticatedUserEmail = useAuthStore(
+    (state) => state.data?.userDto.email,
   );
 
   // Error state
@@ -31,7 +36,12 @@ export default function ProfilePage() {
       <div className="max-w-[1680px] mx-auto px-[70px] py-[60px]">
         <UserProfileSection userId={userId}/>
         {authenticatedUserId === userId && (
-          <OAuthAccountSection userId={userId} />
+          <>
+            {authenticatedUserEmail === null && (
+              <LocalCredentialSection userId={userId} />
+            )}
+            <OAuthAccountSection userId={userId} />
+          </>
         )}
         <OwnedPlaylistsSection userId={userId}/>
         <SubscribedPlaylistSection userId={userId}/>

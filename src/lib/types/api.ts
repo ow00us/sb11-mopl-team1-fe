@@ -444,6 +444,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/users/{userId}/local-credentials/email-verifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 로컬 로그인 이메일 인증 코드 발송
+         * @description OAuth 전용 사용자가 이메일·비밀번호 로그인 수단을 추가하기 위해 이메일 인증 코드를 요청합니다.
+         */
+        post: operations["sendLocalCredentialEmailVerification"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/users/{userId}/local-credentials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 로컬 이메일·비밀번호 로그인 수단 등록
+         * @description OAuth 전용 사용자가 이메일 인증 코드 검증을 완료하고 로컬 이메일·비밀번호 로그인 수단을 등록합니다.
+         */
+        post: operations["registerLocalCredential"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/users/{userId}/role": {
         parameters: {
             query?: never;
@@ -1277,6 +1317,29 @@ export interface components {
              * @enum {string}
              */
             role: "USER" | "ADMIN";
+        };
+        LocalCredentialEmailVerificationRequest: {
+            /**
+             * Format: email
+             * @description 로컬 로그인 ID로 등록할 실제 이메일
+             * @example user@example.com
+             */
+            email: string;
+        };
+        LocalCredentialRegistrationRequest: {
+            /**
+             * Format: email
+             * @description 인증 코드를 발급받은 실제 이메일
+             * @example user@example.com
+             */
+            email: string;
+            /**
+             * @description 이메일로 전달받은 6자리 인증 코드
+             * @example 123456
+             */
+            verificationCode: string;
+            /** @description ASCII 영문, 숫자, 특수문자를 각각 하나 이상 포함하는 새 비밀번호 */
+            password: string;
         };
         ChangePasswordRequest: {
             /** @description 8~72자의 새 비밀번호입니다. ASCII 영문, 숫자, 특수문자를 각각 하나 이상 포함해야 합니다. */
@@ -3056,7 +3119,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 성공 */
+            /** @description 비밀번호 초기화 요청 접수 */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -3065,15 +3128,6 @@ export interface operations {
             };
             /** @description 잘못된 요청 */
             400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "*/*": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description 해당 리소스 없음 */
-            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3492,6 +3546,173 @@ export interface operations {
             };
         };
     };
+    sendLocalCredentialEmailVerification: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 로컬 로그인 수단을 추가할 사용자 ID */
+                userId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LocalCredentialEmailVerificationRequest"];
+            };
+        };
+        responses: {
+            /** @description 이메일 인증 코드 발송 성공 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 이메일 형식이 잘못되었거나 사용할 수 없는 이메일 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 인증 오류 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 다른 사용자이거나 잠긴 사용자 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 사용자를 찾을 수 없음 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 이미 로컬 로그인 수단이 있거나 이메일이 중복됨 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 인증 코드 재전송 대기 시간이 지나지 않음 */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 서버 또는 이메일 발송 오류 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    registerLocalCredential: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 로컬 로그인 수단을 추가할 사용자 ID */
+                userId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LocalCredentialRegistrationRequest"];
+            };
+        };
+        responses: {
+            /** @description 로컬 로그인 수단 등록 성공 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 입력값 또는 이메일 인증 코드가 유효하지 않음 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 인증 오류 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 다른 사용자이거나 잠긴 사용자 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 사용자를 찾을 수 없음 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 이미 로컬 로그인 수단이 있거나 이메일이 중복됨 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 서버 오류 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     updateUser_Role: {
         parameters: {
             query?: never;
@@ -3612,6 +3833,15 @@ export interface operations {
             };
             /** @description 사용자를 찾을 수 없음 */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 변경할 로컬 로그인 수단이 없음 */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
