@@ -4,6 +4,66 @@
  */
 
 export interface paths {
+    "/api/admin/outbox/failures": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * [어드민] 최종 실패 Outbox 이벤트 목록 조회
+         * @description 자동 재시도를 소진해 최종 실패로 남은 이벤트를 발생 시각이 이른 순으로 조회합니다. 이벤트 payload는 내려주지 않습니다.
+         */
+        get: operations["findOutboxFailures"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/outbox/failures/{eventId}/requeue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * [어드민] 최종 실패 Outbox 이벤트 재처리
+         * @description 최종 실패 이벤트 한 건을 다시 발행 대기로 되돌립니다. 새 레코드를 만들지 않고 기존 행의 상태만 바꾸므로 eventId, 파티션 키, 중복 제거 키가 그대로 유지됩니다.
+         */
+        post: operations["requeueOutboxFailure"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/outbox/failures/{eventId}/skip": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * [어드민] 최종 실패 Outbox 이벤트 건너뛰기
+         * @description 최종 실패 이벤트 한 건을 보내지 않기로 하고 종결합니다. 발행 성공으로 표시하거나 행을 지우지 않고, 처리자와 처리 시각, 사유를 함께 보존합니다. 같은 요청이 다시 들어와도 204이며 감사 정보는 처음 전환 때의 값을 유지합니다.
+         */
+        post: operations["skipOutboxFailure"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/users": {
         parameters: {
             query?: never;
@@ -322,6 +382,66 @@ export interface paths {
          * @description 본인의 프로필만 변경할 수 있습니다.
          */
         patch: operations["updateUser"];
+        trace?: never;
+    };
+    "/api/users/{userId}/oauth-accounts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * OAuth 연결 계정 목록 조회
+         * @description 현재 사용자 본인에게 연결된 OAuth 계정 목록을 조회합니다.
+         */
+        get: operations["getLinkedOAuthAccounts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/users/{userId}/oauth-accounts/{provider}/link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * OAuth 계정 연결 인증 시작
+         * @description 현재 사용자 본인에게 OAuth Provider 계정을 연결하기 위한 인증 절차를 시작합니다. 연결 의도는 HTTP Session에 저장되므로 클라이언트는 Cookie credentials를 포함해 이 API를 호출하고, 응답으로 받은 authorizationPath로 이동할 때도 동일한 세션 쿠키를 유지해야 합니다. 세션 쿠키가 유지되지 않으면 OAuth callback이 계정 연결이 아닌 일반 로그인 흐름으로 처리될 수 있습니다. authorizationPath는 백엔드 Origin을 기준으로 이동해야 하는 상대 경로입니다.
+         */
+        post: operations["startOAuthAccountLink"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/users/{userId}/oauth-accounts/{provider}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * OAuth 계정 연결 해제
+         * @description 현재 사용자 본인에게 연결된 OAuth 계정을 해제합니다. 마지막 로그인 수단은 해제할 수 없습니다.
+         */
+        delete: operations["unlinkOAuthAccount"];
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/users/{userId}/role": {
@@ -753,6 +873,41 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        OutboxSkipRequest: {
+            /** @description 건너뛴 사유. 비워 둘 수 없습니다 */
+            reason: string;
+        };
+        /** @description 최종 실패한 Outbox 이벤트 한 건. 이벤트 payload는 담지 않습니다. */
+        OutboxFailureDto: {
+            /**
+             * Format: uuid
+             * @description envelope의 eventId
+             */
+            eventId: string;
+            /** @description 이벤트 타입 */
+            type: string;
+            /**
+             * Format: date-time
+             * @description 도메인 사건이 일어난 시각
+             */
+            occurredAt: string;
+            /**
+             * Format: int32
+             * @description 최종 실패로 남기까지의 발행 시도 횟수
+             */
+            attempts: number;
+            /** @description 마지막 발행 실패 원인. 500자를 넘으면 뒤를 잘라 내려줍니다 */
+            lastError?: string;
+        };
+        OutboxFailureListResponse: {
+            /**
+             * Format: int64
+             * @description 최종 실패 상태인 전체 레코드 수
+             */
+            totalCount: number;
+            /** @description 발생 시각이 이른 순으로 상한만큼 담은 목록 */
+            items: components["schemas"]["OutboxFailureDto"][];
+        };
         UserCreateRequest: {
             /** @description 이름 */
             name: string;
@@ -787,8 +942,8 @@ export interface components {
              * @description 사용자 생성 시간
              */
             createdAt: string;
-            /** @description 이메일 */
-            email: string;
+            /** @description 사용자 이메일입니다. 이메일이 연결되지 않은 OAuth 사용자는 null입니다. */
+            email: string | null;
             /** @description 사용자 이름 */
             name: string;
             /** @description 프로필 이미지 URL */
@@ -799,6 +954,27 @@ export interface components {
              */
             role: "USER" | "ADMIN";
             locked: boolean;
+        };
+        /** @description 사용자에게 연결된 OAuth 계정의 공개 정보 */
+        OAuthAccountDto: {
+            /**
+             * @description OAuth 인증 제공자
+             * @enum {string}
+             */
+            provider: "GOOGLE" | "KAKAO" | "NAVER";
+            /**
+             * Format: date-time
+             * @description OAuth 계정 연결 시각
+             */
+            connectedAt: string;
+        };
+        /** @description OAuth 계정 연결을 시작할 서버 인증 경로 */
+        OAuthLinkStartResponse: {
+            /**
+             * @description Spring Security OAuth2 Provider 인증 시작 경로
+             * @example /oauth2/authorization/google
+             */
+            authorizationPath: string;
         };
         ReviewCreateRequest: {
             /**
@@ -1014,6 +1190,11 @@ export interface components {
              * @description 메시지 생성 시간
              */
             createdAt: string;
+            /**
+             * Format: int64
+             * @description 대화 안에서 서버가 부여한 메시지 순번
+             */
+            messageSequence: number;
             /** @description 발신자 정보 */
             sender: components["schemas"]["UserSummary"];
             /** @description 수신자 정보 */
@@ -1476,6 +1657,210 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    findOutboxFailures: {
+        parameters: {
+            query?: {
+                /** @description 조회 상한 */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 최종 실패 이벤트 목록 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["OutboxFailureListResponse"];
+                };
+            };
+            /** @description 조회 상한이 허용 범위를 벗어남 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 인증 오류 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 관리자 권한 없음 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 서버 오류 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    requeueOutboxFailure: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 재처리할 이벤트의 eventId */
+                eventId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 발행 대기로 되돌림 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 인증 오류 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 관리자 권한 없음 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 해당 eventId의 이벤트가 없음 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 최종 실패 상태가 아니어서 되돌릴 수 없음 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 서버 오류 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    skipOutboxFailure: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 건너뛸 이벤트의 eventId */
+                eventId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OutboxSkipRequest"];
+            };
+        };
+        responses: {
+            /** @description 건너뛰기로 종결 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 사유가 비어 있음 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 인증 오류 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 관리자 권한 없음 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 해당 eventId의 이벤트가 없음 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 최종 실패 상태가 아니어서 건너뛸 수 없음 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 서버 오류 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     findUsers: {
         parameters: {
             query: {
@@ -2865,6 +3250,230 @@ export interface operations {
             };
             /** @description 권한 오류 */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 서버 오류 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getLinkedOAuthAccounts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description OAuth 연결 계정을 조회할 사용자 ID */
+                userId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OAuth 연결 계정 목록 조회 성공 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["OAuthAccountDto"][];
+                };
+            };
+            /** @description 잘못된 사용자 ID */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 인증 오류 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 다른 사용자의 OAuth 연결 정보를 조회할 권한 없음 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 사용자를 찾을 수 없음 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 서버 오류 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    startOAuthAccountLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description OAuth 계정을 연결할 사용자 ID */
+                userId: string;
+                /** @description 연결할 OAuth Provider */
+                provider: "GOOGLE" | "KAKAO" | "NAVER";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OAuth 계정 연결 인증 시작 성공 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["OAuthLinkStartResponse"];
+                };
+            };
+            /** @description 잘못된 사용자 ID 또는 OAuth Provider */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 인증 오류 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 다른 사용자에게 OAuth 계정을 연결할 권한 없음 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 사용자를 찾을 수 없음 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 해당 Provider 계정이 이미 연결됨 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 서버 오류 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    unlinkOAuthAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description OAuth 연결을 해제할 사용자 ID */
+                userId: string;
+                /** @description 연결을 해제할 OAuth Provider */
+                provider: "GOOGLE" | "KAKAO" | "NAVER";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OAuth 계정 연결 해제 성공 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 잘못된 사용자 ID 또는 OAuth Provider */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 인증 오류 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 다른 사용자의 OAuth 연결을 해제할 권한 없음 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 사용자 또는 OAuth 연결 계정을 찾을 수 없음 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 마지막 로그인 수단이어서 연결 해제할 수 없음 */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

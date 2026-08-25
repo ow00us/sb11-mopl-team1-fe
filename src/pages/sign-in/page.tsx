@@ -1,24 +1,41 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import SignInForm from './components/SignInForm';
 import logoIcon from '@/assets/Logo.svg';
+import { consumeOAuthAccountLinkReturnPath } from '@/lib/oauth/accountLinkReturn';
 
 export default function SignInPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const hasHandledOAuthError = useRef(false);
 
   useEffect(() => {
     const error = searchParams.get('error');
-    if (error !== 'oauth_authentication_failed') return;
+    if (
+      error !== 'oauth_authentication_failed'
+      || hasHandledOAuthError.current
+    ) return;
 
+    hasHandledOAuthError.current = true;
+
+    const accountLinkReturnPath = consumeOAuthAccountLinkReturnPath();
     console.error('OAuth sign-in failed:', { error });
-    toast.error('소셜 로그인에 실패했습니다. 다시 시도해주세요.');
+    toast.error(
+      accountLinkReturnPath
+        ? '소셜 계정을 연결하지 못했습니다. 연결 상태를 확인해주세요.'
+        : '소셜 로그인에 실패했습니다. 다시 시도해주세요.',
+    );
 
     /*
      * 오류 쿼리를 제거하여 새로고침할 때 같은 안내가 반복되지 않게 합니다.
      */
-    navigate('/sign-in', { replace: true });
+    navigate(
+      accountLinkReturnPath
+        ? `${accountLinkReturnPath}?oauthLink=failed`
+        : '/sign-in',
+      { replace: true },
+    );
   }, [navigate, searchParams]);
 
   return (

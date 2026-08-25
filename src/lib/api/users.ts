@@ -20,6 +20,9 @@ import type {
   UserLockUpdateRequest,
   CursorResponseUserDto,
   FindUsersParams,
+  OAuthAccountDto,
+  OAuthLinkStartResponse,
+  OAuthProvider,
 } from '@/lib/types';
 
 /**
@@ -144,4 +147,49 @@ export const updateUserLocked = async (
   data: UserLockUpdateRequest,
 ): Promise<void> => {
   await apiClient.patch(`/api/users/${userId}/locked`, data);
+};
+
+/**
+ * 현재 사용자에게 연결된 OAuth 계정 목록을 조회합니다.
+ * GET /api/users/{userId}/oauth-accounts
+ */
+export const getLinkedOAuthAccounts = async (
+  userId: string,
+): Promise<OAuthAccountDto[]> => {
+  const response = await apiClient.get<OAuthAccountDto[]>(
+    `/api/users/${userId}/oauth-accounts`,
+  );
+
+  return response.data;
+};
+
+/**
+ * OAuth Provider 인증을 통한 기존 계정 연결을 시작합니다.
+ * POST /api/users/{userId}/oauth-accounts/{provider}/link
+ *
+ * 연결 의도는 백엔드 HTTP Session에 저장되므로 apiClient의
+ * withCredentials 설정을 통해 세션 Cookie를 유지해야 합니다.
+ */
+export const startOAuthAccountLink = async (
+  userId: string,
+  provider: OAuthProvider,
+): Promise<OAuthLinkStartResponse> => {
+  const response = await apiClient.post<OAuthLinkStartResponse>(
+    `/api/users/${userId}/oauth-accounts/${provider}/link`,
+  );
+
+  return response.data;
+};
+
+/**
+ * 현재 사용자에게 연결된 OAuth Provider 계정을 해제합니다.
+ * DELETE /api/users/{userId}/oauth-accounts/{provider}
+ */
+export const unlinkOAuthAccount = async (
+  userId: string,
+  provider: OAuthProvider,
+): Promise<void> => {
+  await apiClient.delete(
+    `/api/users/${userId}/oauth-accounts/${provider}`,
+  );
 };

@@ -1,8 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { Button } from '@/components/ui/button';
 import { useAuthStore } from '@/lib/stores/useAuthStore';
+import {
+  clearOAuthAccountLinkReturnTarget,
+  consumeOAuthAccountLinkReturnPath,
+} from '@/lib/oauth/accountLinkReturn';
 
 type CallbackStatus = 'RESTORING' | 'FAILED';
 
@@ -18,15 +22,20 @@ export default function OAuthCallbackPage() {
   const isInitialized = useAuthStore((state) => state.isInitialized);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated());
   const [status, setStatus] = useState<CallbackStatus>('RESTORING');
+  const hasHandledResult = useRef(false);
 
   useEffect(() => {
-    if (!isInitialized) return;
+    if (!isInitialized || hasHandledResult.current) return;
+
+    hasHandledResult.current = true;
 
     if (isAuthenticated) {
-      navigate('/contents', { replace: true });
+      const accountLinkReturnPath = consumeOAuthAccountLinkReturnPath();
+      navigate(accountLinkReturnPath || '/contents', { replace: true });
       return;
     }
 
+    clearOAuthAccountLinkReturnTarget();
     setStatus('FAILED');
   }, [isAuthenticated, isInitialized, navigate]);
 
