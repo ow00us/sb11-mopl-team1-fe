@@ -1,23 +1,25 @@
 import { useEffect } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import SignInForm from './components/SignInForm';
 import logoIcon from '@/assets/Logo.svg';
 
 export default function SignInPage() {
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
   useEffect(() => {
     const error = searchParams.get('error');
-    const errorMessage = searchParams.get('error_message');
+    if (error !== 'oauth_authentication_failed') return;
 
-    if (error) {
-      setTimeout(() => {
-        console.error("Faile to sign in.", {error, errorMessage});
-        toast.error('로그인에 실패했습니다. 다시 시도해주세요.');
-      }, 0);
-    }
-  }, []);
+    console.error('OAuth sign-in failed:', { error });
+    toast.error('소셜 로그인에 실패했습니다. 다시 시도해주세요.');
+
+    /*
+     * 오류 쿼리를 제거하여 새로고침할 때 같은 안내가 반복되지 않게 합니다.
+     */
+    navigate('/sign-in', { replace: true });
+  }, [navigate, searchParams]);
 
   return (
     <div className="relative flex min-h-screen w-full items-center justify-center bg-background">

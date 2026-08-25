@@ -6,6 +6,37 @@ import App from './App.tsx';
 import { initializeApiClient } from '@/lib/api/init';
 import { getCsrfToken } from '@/lib/api/auth';
 import { useAuthStore } from '@/lib/stores/useAuthStore';
+import { APP_BASE_PATH } from '@/lib/config/env';
+
+/**
+ * 백엔드 OAuth Handler가 전달하는 일반 경로를 HashRouter 경로로 변환합니다.
+ *
+ * 백엔드 기본 Redirect URI는 `/oauth/callback`과 `/sign-in`이지만,
+ * 현재 프론트 라우터는 `#/oauth/callback`과 `#/sign-in`을 사용합니다.
+ * React를 렌더링하기 전에 현재 URL만 교체하여 Callback과 오류 쿼리를
+ * 올바른 프론트 라우트에 전달합니다.
+ */
+const normalizeOAuthRedirectForHashRouter = () => {
+  if (window.location.hash) return;
+
+  const normalizedBasePath = APP_BASE_PATH.replace(/\/$/, '');
+  const routePath = normalizedBasePath
+    && window.location.pathname.startsWith(normalizedBasePath)
+    ? window.location.pathname.slice(normalizedBasePath.length)
+    : window.location.pathname;
+
+  if (!['/oauth/callback', '/sign-in'].includes(routePath)) return;
+
+  const appPath = normalizedBasePath || '';
+
+  window.history.replaceState(
+    null,
+    '',
+    `${appPath}/#${routePath}${window.location.search}`,
+  );
+};
+
+normalizeOAuthRedirectForHashRouter();
 
 /*
  * Axios 요청 인터셉터가 Zustand 인증 저장소에서 Access Token을

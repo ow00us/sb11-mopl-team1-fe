@@ -9,6 +9,7 @@ import ProtectedLayout from '@/components/layout/ProtectedLayout';
 import SignInPage from '@/pages/sign-in/page';
 import SignUpPage from '@/pages/sign-up/page';
 import ResetPasswordPage from '@/pages/reset-password/page';
+import OAuthCallbackPage from '@/pages/oauth/callback/page';
 
 // Protected Pages
 import ContentsPage from '@/pages/contents/page';
@@ -32,6 +33,9 @@ export default function AppRoutes() {
         {/* Public Auth Routes */}
         <Route path="/sign-in" element={<SignInPage />} />
         <Route path="/sign-up" element={<SignUpPage />} />
+        {featureFlags.oauth && (
+          <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
+        )}
         {featureFlags.passwordReset && (
           <Route path="/reset-password" element={<ResetPasswordPage />} />
         )}
