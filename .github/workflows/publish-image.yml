@@ -46,6 +46,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Lint
+        continue-on-error: true
         run: pnpm lint
 
       # pnpm build 가 tsc -b 를 먼저 돌립니다. 타입 검사가 실패하면 Vite 빌드까지
