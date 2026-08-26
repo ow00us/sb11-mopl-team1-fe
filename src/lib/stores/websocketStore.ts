@@ -55,6 +55,22 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => {
   let pendingClient: Client | null = null;
 
   /**
+   * STOMP 401 이후 진행 중인 인증 복구 작업입니다.
+   *
+   * ERROR 프레임과 WebSocket close 콜백이 거의 동시에 실행되거나 여러 화면이
+   * connect 를 호출하더라도 Refresh Token Rotation 요청은 한 번만 보내야 합니다.
+   */
+  let pendingAuthRecovery: Promise<void> | null = null;
+
+  /**
+   * 현재 유효한 STOMP 클라이언트를 구분하는 세대 번호입니다.
+   *
+   * 이전 소켓을 종료한 뒤 늦게 도착한 close/error 콜백이 새 연결 상태를
+   * 덮어쓰지 못하도록 각 콜백에서 생성 당시 번호를 확인합니다.
+   */
+  let clientGeneration = 0;
+
+  /**
    * 화면이 요청해 둔 구독입니다. 실제 STOMP 구독과 별개로 유지합니다.
    *
    * 소켓이 닫히면 서버는 구독이 없는 새 STOMP 세션을 만들므로 살아 있는 구독
@@ -79,6 +95,8 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => {
    * 않으면 stompjs 가 reconnectDelay 마다 같은 실패를 되풀이합니다.
    */
   const block = (client: Client, error: ErrorResponse) => {
+    clientGeneration += 1;
+    client.reconnectDelay = 0;
     void client.deactivate();
     pendingConnect = null;
     pendingClient = null;
@@ -94,6 +112,105 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => {
     });
   };
 
+  /**
+   * STOMP 인증 실패를 Refresh Token으로 한 번 복구합니다.
+   *
+   * 서버가 ERROR 프레임 뒤 연결을 닫으므로 기존 클라이언트의 자동 재연결은
+   * 중단합니다. 화면이 요청한 구독 목록은 유지하고, 새 Access Token을 발급받은
+   * 뒤 새 STOMP 클라이언트로 연결하여 onConnect에서 구독을 복원합니다.
+   */
+  const recoverAuthentication = (
+    failedClient: Client,
+    error: ErrorResponse,
+  ): Promise<void> => {
+    if (pendingAuthRecovery) {
+      return pendingAuthRecovery;
+    }
+
+    // 실패한 클라이언트의 늦은 콜백을 무효화하고 자동 재연결을 중단합니다.
+    clientGeneration += 1;
+    const recoveryGeneration = clientGeneration;
+    failedClient.reconnectDelay = 0;
+    pendingClient = null;
+    pendingConnect = null;
+
+    set({
+      stompClient: null,
+      isConnected: false,
+      isConnecting: true,
+      subscriptions: new Map(),
+      lastError: error,
+      isBlocked: false,
+    });
+
+    const recoveryPromise = (async () => {
+      await failedClient.deactivate();
+
+      // 복구 도중 로그아웃 등으로 명시적 disconnect가 실행됐다면 중단합니다.
+      if (recoveryGeneration !== clientGeneration) return;
+
+      const restored =
+        await useAuthStore.getState().restoreSession();
+      const refreshedAccessToken =
+        useAuthStore.getState().getAccessToken();
+
+      if (recoveryGeneration !== clientGeneration) return;
+
+      if (!restored || !refreshedAccessToken) {
+        // Refresh Token까지 사용할 수 없을 때에만 로그인 상태와 구독을 버립니다.
+        desiredSubscriptions.clear();
+        useAuthStore.getState().clear();
+        set({
+          stompClient: null,
+          isConnected: false,
+          isConnecting: false,
+          subscriptions: new Map(),
+          lastError: error,
+          isBlocked: true,
+        });
+
+        if (window.location.hash !== '#/sign-in') {
+          window.location.replace('#/sign-in');
+        }
+        return;
+      }
+
+      // 아래 connect가 인증 복구 Promise 자신을 다시 반환하지 않도록 먼저
+      // 복구 잠금을 해제합니다. 이 시점에는 새 Access Token이 Store에 반영됐습니다.
+      pendingAuthRecovery = null;
+      await get().connect(refreshedAccessToken);
+    })().catch((recoveryError: unknown) => {
+      // 재발급에는 성공했지만 네트워크 재연결이 실패한 경우 구독 의도는 유지합니다.
+      // 이후 화면의 재시도 또는 stompjs 연결 흐름이 같은 목적지 구독을 복원합니다.
+      console.error('[stomp] 인증 복구 후 재연결에 실패했습니다:', recoveryError);
+      set({
+        stompClient: null,
+        isConnected: false,
+        isConnecting: false,
+        subscriptions: new Map(),
+        lastError: error,
+        isBlocked: false,
+      });
+    });
+
+    pendingAuthRecovery = recoveryPromise;
+
+    void recoveryPromise.then(
+      () => {
+        if (pendingAuthRecovery === recoveryPromise) {
+          pendingAuthRecovery = null;
+        }
+      },
+      () => {
+        if (pendingAuthRecovery === recoveryPromise) {
+          pendingAuthRecovery = null;
+        }
+      },
+    );
+
+    return recoveryPromise;
+  };
+
   return {
     stompClient: null,
     isConnected: false,
@@ -104,6 +221,10 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => {
 
     connect: (accessToken: string) => {
       if (get().isConnected) return Promise.resolve();
+
+      // 인증 복구 중 새 연결을 만들면 이전 Access Token을 사용하는 클라이언트가
+      // 하나 더 생길 수 있으므로 모든 호출자가 같은 복구 작업을 기다립니다.
+      if (pendingAuthRecovery) return pendingAuthRecovery;
 
       // 연결 중이면 같은 handshake 를 기다립니다. 곧바로 resolve 하면 호출부가
       // 아직 연결되지 않은 클라이언트에 subscribe 를 걸고, subscribe 는
@@ -124,6 +245,8 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => {
         heartbeatOutgoing: 4000,
       });
 
+      const generation = ++clientGeneration;
+
       pendingClient = client;
 
       // 재연결 시점의 토큰을 다시 읽습니다. connectHeaders 를 만들 때 잡아둔 토큰은
@@ -133,8 +256,10 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => {
         client.connectHeaders = { Authorization: `Bearer ${currentToken}` };
       };
 
-      pendingConnect = new Promise<void>((resolve, reject) => {
+      const connectionPromise = new Promise<void>((resolve, reject) => {
         client.onConnect = () => {
+          if (generation !== clientGeneration) return;
+
           set({
             stompClient: client,
             isConnected: true,
@@ -157,6 +282,8 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => {
         };
 
         client.onStompError = (frame: IFrame) => {
+          if (generation !== clientGeneration) return;
+
           const error = parseStompErrorFrame(frame);
 
           if (isPermanentFailure(error)) {
@@ -170,12 +297,11 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => {
           }
 
           if (isUnauthorized(error)) {
-            // 인증 실패는 재연결로 해소되지 않습니다. 로컬 인증 상태를 지워
-            // 화면이 재로그인을 요구하게 합니다.
-            console.debug('[stomp] 인증 실패로 재연결을 중단합니다:', error);
-            block(client, error);
-            useAuthStore.getState().clear();
+            // 만료된 Access Token은 Refresh Token 재발급으로 복구할 수 있습니다.
+            // 현재 연결 Promise를 먼저 종료한 뒤 복구 작업이 새 연결을 만듭니다.
+            console.debug('[stomp] 인증 실패. 토큰 재발급 후 재연결합니다:', error);
             reject(error);
+            void recoverAuthentication(client, error);
             return;
           }
 
@@ -186,6 +312,7 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => {
         };
 
         client.onWebSocketClose = () => {
+          if (generation !== clientGeneration) return;
           if (get().isBlocked) return;
           // 재연결하면 서버는 구독이 없는 새 STOMP 세션을 만듭니다. Map 을 비우지
           // 않으면 화면이 다시 subscribe 해도 이미 구독 중으로 보고 건너뛰어,
@@ -194,20 +321,37 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => {
         };
 
         client.activate();
-      }).finally(() => {
-        pendingConnect = null;
-        pendingClient = null;
       });
 
-      return pendingConnect;
+      pendingConnect = connectionPromise;
+
+      void connectionPromise.then(
+        () => {
+          if (pendingConnect === connectionPromise) {
+            pendingConnect = null;
+            pendingClient = null;
+          }
+        },
+        () => {
+          if (pendingConnect === connectionPromise) {
+            pendingConnect = null;
+            pendingClient = null;
+          }
+        },
+      );
+
+      return connectionPromise;
     },
 
     disconnect: () => {
       const { stompClient } = get();
+      clientGeneration += 1;
       if (stompClient) {
+        stompClient.reconnectDelay = 0;
         void stompClient.deactivate();
       }
       if (pendingClient && pendingClient !== stompClient) {
+        pendingClient.reconnectDelay = 0;
         void pendingClient.deactivate();
       }
       pendingConnect = null;

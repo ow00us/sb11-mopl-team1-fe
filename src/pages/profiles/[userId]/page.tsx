@@ -4,11 +4,22 @@ import OwnedPlaylistsSection from "@/pages/profiles/[userId]/components/OwnedPla
 import SubscribedPlaylistSection
   from "@/pages/profiles/[userId]/components/SubscribedPlaylistSection.tsx";
 import {Button} from "@/components/ui/button.tsx";
+import OAuthAccountSection
+  from '@/pages/profiles/[userId]/components/OAuthAccountSection';
+import LocalCredentialSection
+  from '@/pages/profiles/[userId]/components/LocalCredentialSection';
+import useAuthStore from '@/lib/stores/useAuthStore';
 
 
 export default function ProfilePage() {
   const { userId } = useParams<{ userId: string }>();
   const navigate = useNavigate();
+  const authenticatedUserId = useAuthStore(
+    (state) => state.data?.userDto.id,
+  );
+  const authenticatedUserEmail = useAuthStore(
+    (state) => state.data?.userDto.email,
+  );
 
   // Error state
   if (!userId) {
@@ -24,6 +35,14 @@ export default function ProfilePage() {
     <div className="w-full min-h-screen bg-background">
       <div className="max-w-[1680px] mx-auto px-[70px] py-[60px]">
         <UserProfileSection userId={userId}/>
+        {authenticatedUserId === userId && (
+          <>
+            {authenticatedUserEmail === null && (
+              <LocalCredentialSection userId={userId} />
+            )}
+            <OAuthAccountSection userId={userId} />
+          </>
+        )}
         <OwnedPlaylistsSection userId={userId}/>
         <SubscribedPlaylistSection userId={userId}/>
       </div>

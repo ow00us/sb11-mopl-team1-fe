@@ -14,6 +14,13 @@ export type UserUpdateRequest = components['schemas']['UserUpdateRequest'];
 export type UserRoleUpdateRequest = components['schemas']['UserRoleUpdateRequest'];
 export type UserLockUpdateRequest = components['schemas']['UserLockUpdateRequest'];
 export type UserSummary = components['schemas']['UserSummary'];
+export type OAuthAccountDto = components['schemas']['OAuthAccountDto'];
+export type OAuthLinkStartResponse = components['schemas']['OAuthLinkStartResponse'];
+export type OAuthProvider = OAuthAccountDto['provider'];
+export type LocalCredentialEmailVerificationRequest =
+  components['schemas']['LocalCredentialEmailVerificationRequest'];
+export type LocalCredentialRegistrationRequest =
+  components['schemas']['LocalCredentialRegistrationRequest'];
 
 // Auth types
 export type SignInRequest = components['schemas']['SignInRequest'];

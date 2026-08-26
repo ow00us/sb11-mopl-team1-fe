@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import type { ChangePasswordRequest } from '@/lib/types';
 import ilPassword from '@/assets/il_password.svg';
+import { clearClientSession, disconnectRealtimeClients } from '@/lib/api/init';
 
 interface ChangePasswordFormData {
   password: string;
@@ -48,8 +49,20 @@ export default function ChangePasswordForm() {
 
       toast.success('비밀번호가 변경되었습니다. 새 비밀번호로 로그인해주세요.');
 
-      // Logout and redirect to sign-in
-      await signOut();
+      /*
+       * 비밀번호 변경 성공 시 백엔드는 사용자의 Refresh Token 세션을
+       * 이미 전부 폐기합니다. 정상 로그아웃이 성공하면 실시간 연결만
+       * 정리하고, 네트워크 오류 등으로 로그아웃 호출이 실패하더라도
+       * 로컬 인증과 실시간 연결을 제거해 새 비밀번호 로그인을 요구합니다.
+       */
+      try {
+        await signOut();
+        disconnectRealtimeClients();
+      } catch (signOutError) {
+        console.error('Failed to sign out after password change:', signOutError);
+        clearClientSession();
+      }
+
       navigate('/sign-in');
     } catch (error) {
       console.error("Fail to change password:", error);

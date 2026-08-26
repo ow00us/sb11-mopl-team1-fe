@@ -1,4 +1,5 @@
 import {useEffect, useState} from 'react';
+import { toast } from 'sonner';
 import icHamburger from '@/assets/ic_hamburger.svg';
 import Logo from '@/assets/Logo.svg';
 import icPlus from '@/assets/ic_plus.svg';
@@ -19,7 +20,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import type { NotificationDto } from '@/lib/types';
 import { featureFlags } from '@/lib/config/features';
-import { clearClientSession } from '@/lib/api/init';
+import { disconnectRealtimeClients } from '@/lib/api/init';
 
 export default function GNB() {
   const { toggleSideMenu } = useUIStore();
@@ -29,14 +30,15 @@ export default function GNB() {
   const { connect, subscribe, unsubscribe, isConnected } = useSseStore();
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const [isContentFormOpen, setIsContentFormOpen] = useState(false);
+  const [isSigningOut, setIsSigningOut] = useState(false);
 
   useEffect(() => {
     fetchNotifications();
 
     return () => {
       clearNotifications();
-    }
-  }, []);
+    };
+  }, [fetchNotifications, clearNotifications]);
 
   useEffect(() => {
     if (!featureFlags.sse || !authentication?.accessToken) return;
@@ -63,9 +65,29 @@ export default function GNB() {
   }, [authentication, isConnected, connect, subscribe, unsubscribe]);
 
   const handleLogout = async () => {
-    clearClientSession();
-    await signOut();
-    navigate('/sign-in');
+    if (isSigningOut) return;
+
+    setIsSigningOut(true);
+
+    /*
+     * 서버 로그아웃 요청에는 현재 Access Token이 필요하므로
+     * 로컬 인증 상태를 제거하기 전에 서버 요청을 먼저 실행합니다.
+     */
+    try {
+      await signOut();
+
+      /*
+       * 서버 세션 폐기 성공 후 WebSocket과 SSE 등
+       * 사용자에게 연결된 실시간 클라이언트 상태를 정리합니다.
+       */
+      disconnectRealtimeClients();
+      navigate('/sign-in');
+    } catch (error) {
+      console.error('Failed to sign out:', error);
+      toast.error('로그아웃에 실패했습니다. 잠시 후 다시 시도해주세요.');
+    } finally {
+      setIsSigningOut(false);
+    }
   };
 
   const toggleNotification = () => {
@@ -159,9 +181,10 @@ export default function GNB() {
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={handleLogout}
+                  disabled={isSigningOut}
                   className="text-body3-m text-red-notification cursor-pointer hover:bg-gray-700 focus:bg-gray-700"
                 >
-                  로그아웃
+                  {isSigningOut ? '로그아웃 중...' : '로그아웃'}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

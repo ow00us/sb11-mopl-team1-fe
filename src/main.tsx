@@ -1,16 +1,63 @@
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
-import { HashRouter } from 'react-router-dom'
-import './index.css'
-import App from './App.tsx'
-import { initializeApiClient } from '@/lib/api/init'
-import { getCsrfToken } from '@/lib/api/auth'
+import { StrictMode } from 'react';
+import { createRoot } from 'react-dom/client';
+import { HashRouter } from 'react-router-dom';
+import './index.css';
+import App from './App.tsx';
+import { initializeApiClient } from '@/lib/api/init';
+import { getCsrfToken } from '@/lib/api/auth';
+import { useAuthStore } from '@/lib/stores/useAuthStore';
+import { APP_BASE_PATH } from '@/lib/config/env';
 
-// Initialize API client with auth store integration
-initializeApiClient()
+/**
+ * 백엔드 OAuth Handler가 전달하는 일반 경로를 HashRouter 경로로 변환합니다.
+ *
+ * 백엔드 기본 Redirect URI는 `/oauth/callback`과 `/sign-in`이지만,
+ * 현재 프론트 라우터는 `#/oauth/callback`과 `#/sign-in`을 사용합니다.
+ * React를 렌더링하기 전에 현재 URL만 교체하여 Callback과 오류 쿼리를
+ * 올바른 프론트 라우트에 전달합니다.
+ */
+const normalizeOAuthRedirectForHashRouter = () => {
+  if (window.location.hash) return;
 
-const root = createRoot(document.getElementById('root')!)
+  const normalizedBasePath = APP_BASE_PATH.replace(/\/$/, '');
+  const routePath = normalizedBasePath
+    && window.location.pathname.startsWith(normalizedBasePath)
+    ? window.location.pathname.slice(normalizedBasePath.length)
+    : window.location.pathname;
 
+  if (!['/oauth/callback', '/sign-in'].includes(routePath)) return;
+
+  const appPath = normalizedBasePath || '';
+
+  window.history.replaceState(
+    null,
+    '',
+    `${appPath}/#${routePath}${window.location.search}`,
+  );
+};
+
+normalizeOAuthRedirectForHashRouter();
+
+/*
+ * Axios 요청 인터셉터가 Zustand 인증 저장소에서 Access Token을
+ * 가져올 수 있도록 애플리케이션 렌더링 전에 연결합니다.
+ *
+ * 인증 복원 요청도 apiClient를 사용하므로 restoreSession()보다
+ * 반드시 먼저 실행되어야 합니다.
+ */
+initializeApiClient();
+
+const rootElement = document.getElementById('root');
+
+if (!rootElement) {
+  throw new Error('애플리케이션을 렌더링할 root 요소를 찾을 수 없습니다.');
+}
+
+const root = createRoot(rootElement);
+
+/**
+ * React 애플리케이션을 실제 DOM에 렌더링합니다.
+ */
 const renderApp = () => {
   root.render(
     <StrictMode>
@@ -18,19 +65,56 @@ const renderApp = () => {
         <App />
       </HashRouter>
     </StrictMode>,
-  )
-}
+  );
+};
 
+/*
+ * 공개 화면은 백엔드 상태와 관계없이 즉시 표시합니다.
+ *
+ * 인증이 필요한 화면은 ProtectedRoute가 isInitialized를 확인하여
+ * 복원 결과가 확정될 때까지 로딩 상태를 표시합니다. 따라서 CSRF 또는
+ * Refresh 요청이 지연되더라도 애플리케이션 전체가 빈 화면으로 남지 않습니다.
+ */
+renderApp();
+
+/**
+ * 애플리케이션 최초 실행에 필요한 인증 환경을 준비합니다.
+ *
+ * 실행 순서:
+ *
+ * 1. 상태 변경 요청에 필요한 CSRF Token을 발급받습니다.
+ * 2. HttpOnly Refresh Token Cookie를 이용해 인증 상태를 복원합니다.
+ * 3. 인증 복원 결과를 Zustand에 반영합니다.
+ *
+ * Refresh Token 원문은 HttpOnly Cookie이므로 JavaScript에서 직접
+ * 읽지 않습니다. 브라우저가 withCredentials 요청에 자동으로 포함합니다.
+ */
 const bootstrap = async () => {
   try {
-    // 깨끗한 브라우저에서도 첫 상태 변경 요청 전에 XSRF-TOKEN 쿠키를 준비합니다.
-    await getCsrfToken()
+    /*
+     * POST /api/auth/refresh도 CSRF 보호 대상이므로
+     * 재발급 요청보다 CSRF Token 발급이 먼저 실행되어야 합니다.
+     */
+    await getCsrfToken();
   } catch (error) {
-    // 백엔드가 잠시 내려가 있어도 화면은 열되, 이후 요청은 원래 오류를 표시합니다.
-    console.error('CSRF token bootstrap failed:', error)
+    /*
+     * 기존 XSRF-TOKEN Cookie가 남아 있다면 이후 복원 요청이 성공할
+     * 가능성이 있으므로 CSRF 발급 실패만으로 부팅을 중단하지 않습니다.
+     *
+     * 백엔드가 내려가 있는 경우에도 최소한 로그인 화면은 렌더링되어야 합니다.
+     */
+    console.error('CSRF token bootstrap failed:', error);
   }
 
-  renderApp()
-}
+  /*
+   * Refresh Token Cookie가 존재하면 새로운 Access Token과 사용자 정보를
+   * 받아 Zustand 메모리에 저장합니다.
+   *
+   * Cookie가 없거나 만료된 경우 restoreSession()은 false를 반환하고
+   * 비로그인 상태로 초기화를 마칩니다.
+   */
+  await useAuthStore.getState().restoreSession();
 
-void bootstrap()
+};
+
+void bootstrap();

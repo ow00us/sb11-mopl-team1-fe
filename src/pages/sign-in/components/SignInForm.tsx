@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -7,7 +8,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import { toAbsoluteApiUrl } from '@/lib/config/env';
-import { useState } from 'react';
 import googleIcon from '@/assets/ic_google.svg';
 import kakaoIcon from '@/assets/ic_kakao.svg';
 import { featureFlags } from '@/lib/config/features';
@@ -17,12 +17,31 @@ interface SignInFormData {
   password: string;
 }
 
-type OAuthProvider = 'google' | 'kakao';
+type OAuthProvider = 'google' | 'kakao' | 'naver';
 
 export default function SignInForm() {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
+  const [redirectingProvider, setRedirectingProvider] =
+    useState<OAuthProvider | null>(null);
   const { signIn } = useAuthStore();
+
+  useEffect(() => {
+    /**
+     * OAuth Provider 화면에서 브라우저 뒤로가기로 돌아오면 BFCache가
+     * 이동 직전의 React 상태까지 복원할 수 있습니다. 이때 남아 있는
+     * redirectingProvider를 초기화하여 로그인 폼을 다시 활성화합니다.
+     */
+    const resetOAuthRedirectState = () => {
+      setRedirectingProvider(null);
+    };
+
+    window.addEventListener('pageshow', resetOAuthRedirectState);
+
+    return () => {
+      window.removeEventListener('pageshow', resetOAuthRedirectState);
+    };
+  }, []);
 
   const {
     register,
@@ -38,7 +57,7 @@ export default function SignInForm() {
       toast.success('로그인에 성공했습니다');
       navigate('/contents');
     } catch (error) {
-      console.error("Faile to sign in.", error);
+      console.error('Failed to sign in.', error);
 
       toast.error('로그인에 실패했습니다. 다시 시도해주세요.');
     } finally {
@@ -47,17 +66,20 @@ export default function SignInForm() {
   };
 
   const handleLogin = (provider: OAuthProvider) => {
-    // OAuth2 인가 요청은 백엔드 엔드포인트로 브라우저를 직접 이동시킵니다.
-    window.location.href = toAbsoluteApiUrl(`/oauth2/authorization/${provider}`);
-  }
+    /*
+     * OAuth2 인가 요청은 Ajax가 아니라 브라우저 전체 이동으로 시작합니다.
+     * Provider 화면으로 이동하기 전 모든 버튼을 비활성화하여 중복 인가 요청을
+     * 만들지 않습니다.
+     */
+    if (redirectingProvider) return;
 
-  const handleGoogleLogin = () => {
-    handleLogin('google');
+    setRedirectingProvider(provider);
+    window.location.assign(
+      toAbsoluteApiUrl(`/oauth2/authorization/${provider}`),
+    );
   };
 
-  const handleKakaoLogin = () => {
-    handleLogin('kakao')
-  };
+  const isSubmitting = isLoading || redirectingProvider != null;
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="flex w-full flex-col gap-5">
@@ -83,7 +105,7 @@ export default function SignInForm() {
                 message: '올바른 이메일 형식이 아닙니다',
               },
             })}
-            disabled={isLoading}
+            disabled={isSubmitting}
           />
           {errors.email && (
             <p className="px-2 text-body3-m text-red-notification">{errors.email.message}</p>
@@ -109,7 +131,7 @@ export default function SignInForm() {
             {...register('password', {
               required: '비밀번호를 입력해주세요',
             })}
-            disabled={isLoading}
+            disabled={isSubmitting}
           />
           {errors.password && (
             <p className="px-2 text-body3-m text-red-notification">{errors.password.message}</p>
@@ -121,7 +143,7 @@ export default function SignInForm() {
       <div className="w-full pt-3">
         <Button
           type="submit"
-          disabled={isLoading}
+          disabled={isSubmitting}
           className="h-[54px] w-full rounded-xl bg-pink-500 text-body1-b text-white hover:bg-pink-600 disabled:bg-gray-800 disabled:text-gray-600"
         >
           {isLoading ? '로그인 중...' : '로그인'}
@@ -147,22 +169,43 @@ export default function SignInForm() {
           <div className="flex w-full flex-col gap-5">
             <button
               type="button"
-              onClick={handleGoogleLogin}
-              disabled={isLoading}
+              onClick={() => handleLogin('google')}
+              disabled={isSubmitting}
               className="flex h-[56px] w-full items-center justify-center gap-1 rounded-[200px] bg-[rgba(35,35,43,0.5)] text-body2-sb text-[#dfdfe2] transition-colors hover:bg-[rgba(45,45,53,0.5)] disabled:opacity-50"
             >
               <img src={googleIcon} alt="" className="size-5" />
-              구글로 시작하기
+              {redirectingProvider === 'google'
+                ? '구글로 이동 중...'
+                : '구글로 시작하기'}
             </button>
 
             <button
               type="button"
-              onClick={handleKakaoLogin}
-              disabled={isLoading}
+              onClick={() => handleLogin('kakao')}
+              disabled={isSubmitting}
               className="flex h-[56px] w-full items-center justify-center gap-1 rounded-[200px] bg-[rgba(35,35,43,0.5)] text-body2-sb text-[#dfdfe2] transition-colors hover:bg-[rgba(45,45,53,0.5)] disabled:opacity-50"
             >
               <img src={kakaoIcon} alt="" className="size-5" />
-              카카오 시작하기
+              {redirectingProvider === 'kakao'
+                ? '카카오로 이동 중...'
+                : '카카오로 시작하기'}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleLogin('naver')}
+              disabled={isSubmitting}
+              className="flex h-[56px] w-full items-center justify-center gap-2 rounded-[200px] bg-[rgba(35,35,43,0.5)] text-body2-sb text-[#dfdfe2] transition-colors hover:bg-[rgba(45,45,53,0.5)] disabled:opacity-50"
+            >
+              <span
+                className="flex size-5 items-center justify-center rounded-sm bg-[#03c75a] text-[13px] font-black leading-none text-white"
+                aria-hidden="true"
+              >
+                N
+              </span>
+              {redirectingProvider === 'naver'
+                ? '네이버로 이동 중...'
+                : '네이버로 시작하기'}
             </button>
           </div>
         </>

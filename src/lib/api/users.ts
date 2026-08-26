@@ -20,6 +20,11 @@ import type {
   UserLockUpdateRequest,
   CursorResponseUserDto,
   FindUsersParams,
+  OAuthAccountDto,
+  OAuthLinkStartResponse,
+  OAuthProvider,
+  LocalCredentialEmailVerificationRequest,
+  LocalCredentialRegistrationRequest,
 } from '@/lib/types';
 
 /**
@@ -144,4 +149,74 @@ export const updateUserLocked = async (
   data: UserLockUpdateRequest,
 ): Promise<void> => {
   await apiClient.patch(`/api/users/${userId}/locked`, data);
+};
+
+/**
+ * 현재 사용자에게 연결된 OAuth 계정 목록을 조회합니다.
+ * GET /api/users/{userId}/oauth-accounts
+ */
+export const getLinkedOAuthAccounts = async (
+  userId: string,
+): Promise<OAuthAccountDto[]> => {
+  const response = await apiClient.get<OAuthAccountDto[]>(
+    `/api/users/${userId}/oauth-accounts`,
+  );
+
+  return response.data;
+};
+
+/**
+ * OAuth Provider 인증을 통한 기존 계정 연결을 시작합니다.
+ * POST /api/users/{userId}/oauth-accounts/{provider}/link
+ *
+ * 연결 의도는 백엔드 HTTP Session에 저장되므로 apiClient의
+ * withCredentials 설정을 통해 세션 Cookie를 유지해야 합니다.
+ */
+export const startOAuthAccountLink = async (
+  userId: string,
+  provider: OAuthProvider,
+): Promise<OAuthLinkStartResponse> => {
+  const response = await apiClient.post<OAuthLinkStartResponse>(
+    `/api/users/${userId}/oauth-accounts/${provider}/link`,
+  );
+
+  return response.data;
+};
+
+/**
+ * 현재 사용자에게 연결된 OAuth Provider 계정을 해제합니다.
+ * DELETE /api/users/{userId}/oauth-accounts/{provider}
+ */
+export const unlinkOAuthAccount = async (
+  userId: string,
+  provider: OAuthProvider,
+): Promise<void> => {
+  await apiClient.delete(
+    `/api/users/${userId}/oauth-accounts/${provider}`,
+  );
+};
+
+/**
+ * OAuth 전용 사용자가 로컬 로그인 이메일 인증 코드를 요청합니다.
+ * POST /api/users/{userId}/local-credentials/email-verifications
+ */
+export const sendLocalCredentialEmailVerification = async (
+  userId: string,
+  data: LocalCredentialEmailVerificationRequest,
+): Promise<void> => {
+  await apiClient.post(
+    `/api/users/${userId}/local-credentials/email-verifications`,
+    data,
+  );
+};
+
+/**
+ * 인증한 이메일과 새 비밀번호를 로컬 로그인 수단으로 등록합니다.
+ * POST /api/users/{userId}/local-credentials
+ */
+export const registerLocalCredential = async (
+  userId: string,
+  data: LocalCredentialRegistrationRequest,
+): Promise<void> => {
+  await apiClient.post(`/api/users/${userId}/local-credentials`, data);
 };

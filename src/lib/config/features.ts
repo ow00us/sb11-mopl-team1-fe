@@ -7,8 +7,8 @@
 export const featureFlags = {
   // 대응 API 없음. 백엔드에 재설정 엔드포인트가 없습니다.
   passwordReset: false,
-  // 대응 API 없음. 백엔드에 OAuth2 설정이 없습니다.
-  oauth: false,
+  // Google OIDC, Kakao OAuth2, Naver OAuth2 로그인
+  oauth: true,
   // GET /api/users (관리자 전용)
   adminUsers: true,
   // GET /api/sse (text/event-stream)
