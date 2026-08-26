@@ -27,7 +27,11 @@ FROM nginx:1.27-alpine AS runtime
 
 # 프록시 대상입니다. 컨테이너 기동 시 nginx.conf.template 에 치환됩니다.
 # 끝에 / 를 두지 않습니다. 설정이 원본 URI 를 직접 이어 붙입니다.
-ENV BACKEND_UPSTREAM="http://mopl-app:8080"
+#
+# 백엔드 인스턴스가 여럿이면 이 이름 하나가 전부로 해석되어야 합니다. Docker 네트워크
+# 별칭이나 VPC 의 서비스 디스커버리 이름을 씁니다. 인스턴스 하나를 직접 가리키면 나머지는
+# 요청을 받지 못하고, 그 인스턴스가 내려가면 전체가 502 입니다.
+ENV BACKEND_UPSTREAM="http://backend:8080"
 
 # 백엔드 주소를 요청 시점에 다시 조회할 때 쓰는 DNS 서버입니다.
 # 기본값은 Docker 내장 DNS 이고, ECS 등 다른 환경에서는 해당 VPC resolver 를 줍니다.

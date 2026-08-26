@@ -11,6 +11,22 @@ map $http_upgrade $connection_upgrade {
     ''      close;
 }
 
+# 외부에서 TLS 를 종단하면 이 Nginx 에는 평문 http 로 들어옵니다. 그래서 $scheme 은
+# http 입니다. 앞단이 이미 넣어 준 X-Forwarded-Proto 를 $scheme 으로 덮으면 백엔드가
+# 자기를 http 로 인식해, 절대 URI 를 만드는 경로마다 https 가 사라집니다.
+#
+# 들어온 값이 있으면 그것을 쓰고, 없을 때만 $scheme 을 씁니다. 앞단이 없는 환경에서도
+# 그대로 동작합니다.
+map $http_x_forwarded_proto $forwarded_proto {
+    default $http_x_forwarded_proto;
+    ''      $scheme;
+}
+
+map $http_x_forwarded_host $forwarded_host {
+    default $http_x_forwarded_host;
+    ''      $host;
+}
+
 server {
     listen 8080;
     server_name _;
@@ -44,11 +60,28 @@ server {
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Proto $forwarded_proto;
+        proxy_set_header X-Forwarded-Host $forwarded_host;
 
         # SSE 는 응답을 버퍼링하면 이벤트가 즉시 전달되지 않습니다.
         proxy_buffering off;
         proxy_read_timeout 1h;
+    }
+
+    # OAuth Provider 가 인가 코드를 들고 돌아오는 경로입니다. Spring Security 의
+    # 콜백 엔드포인트이므로 백엔드가 받아야 합니다.
+    #
+    # 이 블록이 없으면 아래 location / 의 SPA fallback 으로 떨어져 index.html 이
+    # 반환됩니다. 화면은 뜨지만 로그인은 끝나지 않고, 원인은 브라우저 주소창만
+    # 봐서는 드러나지 않습니다.
+    location /login/oauth2/code/ {
+        proxy_pass $backend_upstream$request_uri;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $forwarded_proto;
+        proxy_set_header X-Forwarded-Host $forwarded_host;
     }
 
     location /oauth2/ {
@@ -57,7 +90,8 @@ server {
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Proto $forwarded_proto;
+        proxy_set_header X-Forwarded-Host $forwarded_host;
     }
 
     # SockJS 는 WebSocket 외에 XHR polling 등으로 fallback 하므로 /ws 하위
@@ -70,7 +104,8 @@ server {
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Proto $forwarded_proto;
+        proxy_set_header X-Forwarded-Host $forwarded_host;
 
         # STOMP heartbeat 는 4초 간격입니다. 기본 60초 타임아웃이면 유휴
         # 연결이 끊기므로 넉넉히 둡니다.
