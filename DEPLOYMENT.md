@@ -80,6 +80,40 @@ Docker 내장 DNS가 별칭 하나에 두 컨테이너 주소를 모두 돌려�
 
 이 경로를 프록시하지 않으면 SPA fallback으로 떨어져 `index.html`이 반환됩니다. 화면은 뜨지만 로그인은 끝나지 않고, 브라우저 주소창만 봐서는 원인이 드러나지 않습니다.
 
+## 이미지 게시
+
+`main` push에서 `Publish image` 워크플로가 ECR에 게시합니다. PR에서는 빌드와 검증만 하고 게시하지 않습니다. 검증되지 않은 commit의 태그가 레지스트리에 남으면 배포 대상을 고를 때 무엇이 검증된 것인지 구분할 수 없습니다.
+
+게시에 필요한 저장소 변수입니다. 비밀 값이 아니므로 Secret이 아니라 Variables에 둡니다.
+
+| 변수 | 값 |
+| --- | --- |
+| `AWS_REGION` | `ap-northeast-2` |
+| `ECR_REPOSITORY` | `sb11-mopl-team1/frontend` |
+| `AWS_DEPLOY_ROLE_ARN` | 백엔드와 같은 OIDC 역할 |
+
+`ECR_REPOSITORY`가 비어 있으면 게시 단계를 건너뜁니다. 변수를 넣기 전까지 `main` push마다 실패로 남지 않게 하기 위한 조건입니다.
+
+장기 자격 증명을 저장소에 두지 않습니다. OIDC로 IAM 역할을 맡습니다.
+
+태그는 둘을 만듭니다.
+
+| 태그 | 쓰는 곳 |
+| --- | --- |
+| commit SHA | 배포와 rollback. 한 번 붙으면 다른 이미지를 가리키지 않습니다 |
+| `main` | 사람이 최신을 확인하는 용도. 매 배포마다 다른 이미지를 가리킵니다 |
+
+배포에는 digest 또는 commit SHA 태그를 씁니다.
+
+### 워크플로가 확인하는 것
+
+- `pnpm lint`, `pnpm build`(`tsc -b` 포함)
+- 컨테이너 안에서 `nginx -t`
+- `/health` 응답과 컨테이너 비정상 종료 여부
+- SPA 직접 진입이 `index.html`로 떨어지는지
+- `/api/**`, `/oauth2/**`, `/login/oauth2/code/**`가 **SPA로 떨어지지 않고** 백엔드로 전달되는지
+- 게시 후 digest로 다시 받아 `/health` 재확인
+
 ## 실행 예시
 
 백엔드가 같은 Docker 네트워크에서 `backend`라는 이름으로 해석되는 경우 다음과 같이 기동할 수 있습니다.

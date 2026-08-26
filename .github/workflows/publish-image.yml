@@ -1,0 +1,194 @@
+name: Publish image
+
+# PR 에서는 검증만 하고 게시하지 않습니다. 검증되지 않은 commit 의 태그가 레지스트리에
+# 남으면 배포 대상을 고를 때 무엇이 검증된 것인지 구분할 수 없습니다.
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+  # 같은 commit 을 다시 게시해야 할 때 쓰는 수동 실행입니다.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-image-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build and verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      # OIDC 로 IAM 역할을 맡습니다. 장기 registry 자격 증명을 저장소에 두지 않습니다.
+      # PR 에서는 게시하지 않으므로 쓰이지 않습니다.
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # package.json 에 packageManager 필드가 없어 버전을 여기서 정합니다.
+      # pnpm-workspace.yaml 의 allowBuilds 와 lockfileVersion 9.0 이 pnpm 10 입니다.
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      # pnpm build 가 tsc -b 를 먼저 돌립니다. 타입 검사가 실패하면 Vite 빌드까지
+      # 가지 않습니다. 이미지 빌드 전에 여기서 걸러야 실패를 빨리 봅니다.
+      - name: Type check and build
+        run: pnpm build
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # 게시 여부와 무관하게 이미지를 만들고 확인합니다. PR 에서도 Nginx 설정이 깨지면
+      # 여기서 드러나야 합니다. 머지한 뒤에 알게 되면 되돌릴 대상이 이미 main 입니다.
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: mopl-fe:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: false
+
+      - name: Verify image
+        run: |
+          set -euo pipefail
+
+          # 컨테이너 안에서 실제 설정으로 확인합니다. 템플릿은 기동 시 envsubst 로
+          # 치환되므로, 치환 결과가 유효한지는 파일만 봐서는 알 수 없습니다.
+          docker run --rm --entrypoint /docker-entrypoint.sh mopl-fe:ci nginx -t
+
+          docker run --detach --name mopl-fe-ci --publish 8080:8080 mopl-fe:ci
+
+          for attempt in $(seq 1 30); do
+            if [[ "$(docker inspect --format '{{.State.Status}}' mopl-fe-ci)" != "running" ]]; then
+              echo "컨테이너가 비정상 종료했습니다."
+              docker logs mopl-fe-ci
+              exit 1
+            fi
+            if curl --fail --silent http://127.0.0.1:8080/health | grep -q '^ok$'; then
+              echo "health 응답 확인 ($attempt 번째)"
+              break
+            fi
+            if [[ $attempt -eq 30 ]]; then
+              echo "health 가 응답하지 않습니다."
+              docker logs mopl-fe-ci
+              exit 1
+            fi
+            sleep 2
+          done
+
+          # SPA 직접 진입이 index.html 로 떨어지는지 확인합니다. 여기가 깨지면
+          # 새로고침과 딥링크가 404 가 됩니다.
+          curl --fail --silent http://127.0.0.1:8080/some/deep/route | grep -q '<div id="root">'
+          echo "SPA fallback 확인"
+
+          # 백엔드가 없으므로 프록시 경로는 502 여야 합니다. 200 이 오면 SPA fallback
+          # 으로 잘못 떨어진 것이고, 그것이 OAuth 콜백이 조용히 깨지던 원인입니다.
+          for path in /api/health /oauth2/authorization/google /login/oauth2/code/google; do
+            code="$(curl --silent --output /dev/null --write-out '%{http_code}' \
+              "http://127.0.0.1:8080${path}")"
+            if [[ "$code" == "200" ]]; then
+              echo "$path 가 백엔드로 가지 않고 SPA 로 떨어졌습니다."
+              exit 1
+            fi
+            echo "$path → $code (백엔드로 전달됨)"
+          done
+
+      - name: Remove container
+        if: always()
+        run: docker rm --force mopl-fe-ci || true
+
+      # 여기부터는 main 에서만 돕니다.
+      - name: Configure AWS credentials
+        if: ${{ github.event_name != 'pull_request' && vars.ECR_REPOSITORY != '' }}
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Log in to Amazon ECR
+        id: ecr
+        if: ${{ github.event_name != 'pull_request' && vars.ECR_REPOSITORY != '' }}
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # 태그를 둘 만듭니다. commit SHA 태그는 한 번 붙으면 다른 이미지를 가리키지
+      # 않으므로 배포와 rollback 이 이 값을 기준으로 삼습니다. main 태그는 사람이
+      # 최신을 확인하는 용도이고 매 배포마다 다른 이미지를 가리킵니다.
+      - name: Push image
+        id: push
+        if: ${{ github.event_name != 'pull_request' && vars.ECR_REPOSITORY != '' }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ steps.ecr.outputs.registry }}/${{ vars.ECR_REPOSITORY }}:${{ github.sha }}
+            ${{ steps.ecr.outputs.registry }}/${{ vars.ECR_REPOSITORY }}:main
+          cache-from: type=gha
+          provenance: false
+
+      # 게시한 것이 곧 배포할 것입니다. 로컬 빌드 결과가 아니라 레지스트리에서 digest 로
+      # 다시 받아 확인해야 그 사이에 다른 것이 올라가지 않았음이 드러납니다.
+      - name: Verify published image
+        if: ${{ github.event_name != 'pull_request' && vars.ECR_REPOSITORY != '' }}
+        env:
+          IMAGE: ${{ steps.ecr.outputs.registry }}/${{ vars.ECR_REPOSITORY }}@${{ steps.push.outputs.digest }}
+        run: |
+          set -euo pipefail
+
+          docker pull "$IMAGE"
+          docker run --detach --name mopl-fe-published --publish 8081:8080 "$IMAGE"
+
+          for attempt in $(seq 1 30); do
+            if [[ "$(docker inspect --format '{{.State.Status}}' mopl-fe-published)" != "running" ]]; then
+              echo "게시한 이미지가 비정상 종료했습니다."
+              docker logs mopl-fe-published
+              exit 1
+            fi
+            curl --fail --silent http://127.0.0.1:8081/health | grep -q '^ok$' && break
+            [[ $attempt -eq 30 ]] && { docker logs mopl-fe-published; exit 1; }
+            sleep 2
+          done
+
+          docker rm --force mopl-fe-published
+
+      # 후속 배포가 이 값을 씁니다. 실행 로그를 뒤지지 않고 찾을 수 있어야 합니다.
+      - name: Record image reference
+        if: ${{ github.event_name != 'pull_request' && vars.ECR_REPOSITORY != '' }}
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+          REPOSITORY: ${{ vars.ECR_REPOSITORY }}
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          {
+            echo "### 게시한 운영 이미지"
+            echo
+            echo "| 항목 | 값 |"
+            echo "| --- | --- |"
+            echo "| commit | \`${{ github.sha }}\` |"
+            echo "| 불변 태그 | \`$REGISTRY/$REPOSITORY:${{ github.sha }}\` |"
+            echo "| 이동 태그 | \`$REGISTRY/$REPOSITORY:main\` |"
+            echo "| digest | \`$DIGEST\` |"
+            echo
+            echo "배포에는 digest 또는 commit SHA 태그를 사용합니다. \`main\` 태그는 사람이 최신을 확인하는 용도입니다."
+          } >> "$GITHUB_STEP_SUMMARY"
