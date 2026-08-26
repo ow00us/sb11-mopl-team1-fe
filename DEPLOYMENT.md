@@ -4,7 +4,7 @@
 
 ## 동일 origin 구성
 
-Nginx가 정적 파일을 제공하고 `/api`, `/oauth2`, `/ws`를 백엔드로 넘깁니다. 브라우저 입장에서 프론트엔드와 API가 같은 origin이므로 다음이 성립합니다.
+Nginx가 정적 파일을 제공하고 `/api`, `/oauth2`, `/login/oauth2/code`, `/ws`를 백엔드로 넘깁니다. 브라우저 입장에서 프론트엔드와 API가 같은 origin이므로 다음이 성립합니다.
 
 - CORS preflight가 발생하지 않습니다.
 - 백엔드가 내려주는 `XSRF-TOKEN` 쿠키를 프론트엔드 JavaScript가 읽을 수 있습니다. 다른 호스트에 두면 host-only 쿠키라 `document.cookie`로 접근할 수 없습니다.
@@ -23,12 +23,32 @@ Dockerfile은 Vite 빌드 단계와 Nginx 실행 단계를 분리합니다. 실�
 
 | 변수 | 설명 |
 | --- | --- |
-| `BACKEND_UPSTREAM` | 프록시 대상 백엔드 주소. 기본값 `http://mopl-app:8080` |
+| `BACKEND_UPSTREAM` | 프록시 대상 백엔드 주소. 기본값 `http://backend:8080` |
 | `NGINX_RESOLVER` | 백엔드 주소를 다시 조회할 DNS 서버. 기본값 `127.0.0.11` |
 
 컨테이너 기동 시 Nginx 공식 이미지의 entrypoint가 `nginx.conf.template`의 `${BACKEND_UPSTREAM}`과 `${NGINX_RESOLVER}`를 치환합니다.
 
 `BACKEND_UPSTREAM`은 **끝에 `/`를 두지 않습니다.** 설정이 원본 URI를 직접 이어 붙이므로 슬래시가 겹칩니다.
+
+### 백엔드 인스턴스가 여럿일 때
+
+`BACKEND_UPSTREAM`의 이름 하나가 **모든 백엔드 인스턴스로 해석되어야** 합니다. 인스턴스 하나를 직접 가리키면 나머지는 요청을 받지 못하고, 그 인스턴스가 내려가면 전체가 `502`입니다.
+
+Docker Compose에서는 두 백엔드 서비스에 같은 네트워크 별칭을 주면 됩니다.
+
+```yaml
+services:
+  backend-a:
+    networks:
+      app:
+        aliases: [backend]
+  backend-b:
+    networks:
+      app:
+        aliases: [backend]
+```
+
+Docker 내장 DNS가 별칭 하나에 두 컨테이너 주소를 모두 돌려주고, 아래 재조회 설정이 요청 시점마다 다시 물어 새로 뜬 인스턴스를 반영합니다.
 
 ### 백엔드 주소 재조회
 
@@ -40,15 +60,35 @@ Dockerfile은 Vite 빌드 단계와 Nginx 실행 단계를 분리합니다. 실�
 
 빌드 시점 값인 `VITE_API_BASE_URL`과 `VITE_PUBLIC_PATH`는 Dockerfile에서 빈 값으로 고정합니다. 동일 origin 배포가 아닌 구성이 필요하면 별도 이슈에서 다룹니다.
 
+### 전달 헤더
+
+외부에서 TLS를 종단하면 이 Nginx에는 평문 `http`로 들어옵니다. 그래서 `$scheme`은 `http`입니다.
+
+앞단이 이미 넣어 준 `X-Forwarded-Proto`를 `$scheme`으로 덮으면 백엔드가 자기를 `http`로 인식합니다. 절대 URI를 만드는 경로마다 `https`가 사라지고, 그 사실은 링크를 눌러 봐야 드러납니다.
+
+들어온 값이 있으면 그것을 쓰고, 없을 때만 `$scheme`을 씁니다. 앞단이 없는 환경에서도 그대로 동작합니다. `X-Forwarded-Host`도 같은 방식입니다.
+
+| 헤더 | 값 |
+| --- | --- |
+| `X-Forwarded-Proto` | 들어온 값, 없으면 `$scheme` |
+| `X-Forwarded-Host` | 들어온 값, 없으면 `$host` |
+| `X-Forwarded-For` | `$proxy_add_x_forwarded_for` |
+
+### OAuth Provider 콜백
+
+`/login/oauth2/code/**`는 Provider가 인가 코드를 들고 돌아오는 경로입니다. Spring Security의 콜백 엔드포인트이므로 백엔드가 받아야 합니다.
+
+이 경로를 프록시하지 않으면 SPA fallback으로 떨어져 `index.html`이 반환됩니다. 화면은 뜨지만 로그인은 끝나지 않고, 브라우저 주소창만 봐서는 원인이 드러나지 않습니다.
+
 ## 실행 예시
 
-백엔드가 같은 Docker 네트워크에서 `mopl-app`이라는 이름으로 실행 중인 경우 다음과 같이 기동할 수 있습니다.
+백엔드가 같은 Docker 네트워크에서 `backend`라는 이름으로 해석되는 경우 다음과 같이 기동할 수 있습니다.
 
 ```bash
 docker run --rm \
   --network <docker-network> \
   -p 8080:8080 \
-  -e BACKEND_UPSTREAM=http://mopl-app:8080 \
+  -e BACKEND_UPSTREAM=http://backend:8080 \
   mopl-fe:local
 ```
 
