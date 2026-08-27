@@ -4,6 +4,7 @@ import { useAuthStore } from '@/lib/stores/useAuthStore';
 import MessageBubble from './MessageBubble';
 import MessageInput from './MessageInput';
 import ConnectionBanner from './ConnectionBanner';
+import FailedMessageBubble from './FailedMessageBubble';
 import icProfileDefault from '@/assets/ic_profile_default.svg';
 import useConversationDetailStore from "@/lib/stores/useConversationDetailStore.ts";
 import {markDirectMessageAsRead} from "@/lib/api";
@@ -13,10 +14,27 @@ import {useNavigate} from "react-router-dom";
 interface MessageThreadProps {
   conversationId: string;
   onSendMessage: (content: string) => void;
+  failedMessages: FailedMessage[];
+  retryingMessageIds: Set<string>;
+  onRetryMessage: (messageId: string) => void;
   isConnected: boolean;
 }
 
-export default function MessageThread({ conversationId, onSendMessage, isConnected }: MessageThreadProps) {
+export interface FailedMessage {
+  id: string;
+  conversationId: string;
+  content: string;
+  createdAt: string;
+}
+
+export default function MessageThread({
+  conversationId,
+  onSendMessage,
+  failedMessages,
+  retryingMessageIds,
+  onRetryMessage,
+  isConnected,
+}: MessageThreadProps) {
   const { data: conversation, updateParams: updateConversationDetailParam, clearData: clearConversationDetailData } = useConversationDetailStore();
   const { data: messages, loading, updateParams, clearData, fetchMore, hasNext } = useDirectMessageStore();
   const { data: authentication } = useAuthStore();
@@ -45,11 +63,21 @@ export default function MessageThread({ conversationId, onSendMessage, isConnect
   }, [conversationId, updateParams, clearData, updateConversationDetailParam, clearConversationDetailData]);
 
   useEffect(() => {
-    if (conversation && conversation.latestMessage) {
-      markDirectMessageAsRead(conversation.id, conversation.latestMessage.id);
+    const latestMessage = conversation?.latestMessage;
+    const currentUserId = authentication?.userDto.id;
+
+    if (
+      conversation
+      && latestMessage
+      && latestMessage.receiver.userId === currentUserId
+      && !latestMessage.readAt
+    ) {
+      void markDirectMessageAsRead(conversation.id, latestMessage.id).catch((error) => {
+        console.error('Failed to mark direct message as read:', error);
+      });
       updateConversation(conversation.id, { hasUnread: false });
     }
-  }, [conversation]);
+  }, [authentication?.userDto.id, conversation, updateConversation]);
 
   // 과거 메시지를 붙인 직후에는 위치를 되돌려야 합니다.
   //
@@ -68,7 +96,7 @@ export default function MessageThread({ conversationId, onSendMessage, isConnect
     // 아래 자동 하단 스크롤 effect 가 이번 렌더에는 끼어들지 않게 합니다.
     skipAutoScrollRef.current = true;
     isLoadingMoreRef.current = false;
-  }, [messages]);
+  }, [failedMessages.length, messages]);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -133,6 +161,12 @@ export default function MessageThread({ conversationId, onSendMessage, isConnect
     return currentMessage.sender.userId !== previousMessage.sender.userId;
   };
 
+  // 같은 발신자가 연속으로 보낸 묶음의 마지막 메시지에만 읽음 상태를 표시합니다.
+  const isLastInSenderGroup = (index: number, messagesArray: typeof messages): boolean => {
+    if (index === messagesArray.length - 1) return true;
+    return messagesArray[index].sender.userId !== messagesArray[index + 1].sender.userId;
+  };
+
   // Get other user info (temporary - assumes first message sender who isn't me)
   const currentUserId = authentication?.userDto.id;
   const otherUser = conversation?.with;
@@ -168,11 +202,11 @@ export default function MessageThread({ conversationId, onSendMessage, isConnect
         ref={containerRef}
         className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-gray-900"
       >
-        {loading && displayMessages.length === 0 ? (
+        {loading && displayMessages.length === 0 && failedMessages.length === 0 ? (
           <div className="flex items-center justify-center h-full">
             <div className="w-8 h-8 border-2 border-gray-600 border-t-gray-300 rounded-full animate-spin" />
           </div>
-        ) : displayMessages.length === 0 ? (
+        ) : displayMessages.length === 0 && failedMessages.length === 0 ? (
           <div className="flex items-center justify-center h-full">
             <p className="text-body2-m text-gray-500">메시지가 없습니다.</p>
           </div>
@@ -196,12 +230,26 @@ export default function MessageThread({ conversationId, onSendMessage, isConnect
 
             {/* Messages */}
             <div className="flex flex-col gap-3">
-              {displayMessages.map((message, index) => (
-                <MessageBubble
+              {displayMessages.map((message, index) => {
+                const isMine = message.sender.userId === currentUserId;
+
+                return (
+                  <MessageBubble
+                    key={message.id}
+                    message={message}
+                    isMine={isMine}
+                    showProfile={shouldShowProfile(index, displayMessages)}
+                    showReadStatus={isMine && isLastInSenderGroup(index, displayMessages)}
+                  />
+                );
+              })}
+              {failedMessages.map((message) => (
+                <FailedMessageBubble
                   key={message.id}
-                  message={message}
-                  isMine={message.sender.userId === currentUserId}
-                  showProfile={shouldShowProfile(index, displayMessages)}
+                  content={message.content}
+                  createdAt={message.createdAt}
+                  retrying={retryingMessageIds.has(message.id)}
+                  onRetry={() => onRetryMessage(message.id)}
                 />
               ))}
               <div ref={messagesEndRef} />

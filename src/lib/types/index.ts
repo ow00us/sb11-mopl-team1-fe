@@ -52,6 +52,15 @@ export type ReviewUpdateRequest = components['schemas']['ReviewUpdateRequest'];
 export type ConversationDto = components['schemas']['ConversationDto'];
 export type ConversationCreateRequest = components['schemas']['ConversationCreateRequest'];
 export type DirectMessageDto = components['schemas']['DirectMessageDto'];
+export type DirectMessageReadEvent = {
+  conversationId: string;
+  readerId: string;
+  lastReadMessageId: string;
+  readAt: string;
+};
+export type DirectMessageRealtimeEvent =
+  | { type: 'DIRECT_MESSAGE_CREATED'; data: DirectMessageDto }
+  | { type: 'DIRECT_MESSAGE_READ'; data: DirectMessageReadEvent };
 
 // Follow types
 export type FollowDto = components['schemas']['FollowDto'];
@@ -82,6 +91,7 @@ export type WatchingSessionChange = {
 
 // Cursor pagination types
 export type CursorResponseUserDto = components['schemas']['CursorResponseUserDto'];
+export type CursorResponseUserSummary = components['schemas']['CursorResponseUserSummary'];
 export type CursorResponseContentDto = components['schemas']['CursorResponseContentDto'];
 export type CursorResponsePlaylistDto = components['schemas']['CursorResponsePlaylistDto'];
 export type CursorResponseReviewDto = components['schemas']['CursorResponseReviewDto'];
@@ -123,6 +133,7 @@ export type NotificationLevel = 'INFO' | 'WARNING' | 'ERROR';
 
 // User query params
 export type FindUsersParams = operations['findUsers']['parameters']['query'];
+export type SearchUsersParams = operations['searchUsers']['parameters']['query'];
 
 // Content query params
 export type FindContentsParams = operations['findContents']['parameters']['query'];

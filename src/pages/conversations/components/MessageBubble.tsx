@@ -6,9 +6,15 @@ interface MessageBubbleProps {
   message: DirectMessageDto;
   isMine: boolean;
   showProfile?: boolean;
+  showReadStatus?: boolean;
 }
 
-export default function MessageBubble({ message, isMine, showProfile = true }: MessageBubbleProps) {
+export default function MessageBubble({
+  message,
+  isMine,
+  showProfile = true,
+  showReadStatus = false,
+}: MessageBubbleProps) {
   const navigate = useNavigate();
   // 시간 포맷팅 (예: "오전 1:00")
   const formatTime = (dateString: string) => {
@@ -24,7 +30,12 @@ export default function MessageBubble({ message, isMine, showProfile = true }: M
     // 내가 보낸 메시지 - 오른쪽 정렬, 핑크색
     return (
       <div className="flex min-w-0 items-end justify-end gap-1.5 px-[30px]">
-        <div className="flex shrink-0 items-center px-0 py-1">
+        <div className="flex shrink-0 flex-col items-end gap-0.5 px-0 py-1">
+          {showReadStatus && (
+            <span className="text-caption1-m text-pink-400">
+              {message.readAt ? '읽음' : '미읽음'}
+            </span>
+          )}
           <span className="text-caption1-m text-gray-600">
             {formatTime(message.createdAt)}
           </span>

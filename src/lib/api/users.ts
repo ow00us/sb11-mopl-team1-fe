@@ -19,7 +19,9 @@ import type {
   ChangePasswordRequest,
   UserLockUpdateRequest,
   CursorResponseUserDto,
+  CursorResponseUserSummary,
   FindUsersParams,
+  SearchUsersParams,
   OAuthAccountDto,
   OAuthLinkStartResponse,
   OAuthProvider,
@@ -50,6 +52,16 @@ export const getUserById = async (userId: string): Promise<UserDto> => {
  */
 export const getUsers = async (params?: FindUsersParams): Promise<CursorResponseUserDto> => {
   const response = await apiClient.get<CursorResponseUserDto>('/api/users', { params });
+  return response.data;
+};
+
+/** 인증된 사용자가 DM 대상을 이름으로 검색합니다. */
+export const searchUsers = async (
+  params: SearchUsersParams,
+): Promise<CursorResponseUserSummary> => {
+  const response = await apiClient.get<CursorResponseUserSummary>('/api/users/search', {
+    params,
+  });
   return response.data;
 };
 

@@ -7,6 +7,8 @@ import ConversationItem from './ConversationItem';
 import icSearch from '@/assets/ic_search.svg';
 import type { DirectMessageDto } from '@/lib/types';
 import { featureFlags } from '@/lib/config/features';
+import { MessageSquarePlus } from 'lucide-react';
+import NewConversationDialog from './NewConversationDialog';
 
 interface ConversationListProps {
   selectedConversationId?: string;
@@ -15,6 +17,7 @@ interface ConversationListProps {
 
 export default function ConversationList({ selectedConversationId, onSelectConversation }: ConversationListProps) {
   const [searchQuery, setSearchQuery] = useState('');
+  const [isNewConversationOpen, setIsNewConversationOpen] = useState(false);
   const { data: conversations, loading, fetch, fetchMore, hasNext, updateParams } = useConversationStore();
   const { subscribe, unsubscribe } = useSseStore();
 
@@ -79,6 +82,18 @@ export default function ConversationList({ selectedConversationId, onSelectConve
 
   return (
     <div className="flex flex-col h-full">
+      <div className="flex items-center justify-between border-b border-gray-800 px-6 py-4">
+        <h1 className="text-title1-sb text-gray-100">메시지</h1>
+        <button
+          type="button"
+          onClick={() => setIsNewConversationOpen(true)}
+          className="flex size-9 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-gray-800 hover:text-white"
+          aria-label="새 대화 시작"
+        >
+          <MessageSquarePlus className="size-5" />
+        </button>
+      </div>
+
       {/* Search Bar */}
       <div className="px-6 py-3.5 border-b border-gray-800">
         <div className="relative">
@@ -124,6 +139,11 @@ export default function ConversationList({ selectedConversationId, onSelectConve
           </>
         )}
       </div>
+
+      <NewConversationDialog
+        open={isNewConversationOpen}
+        onOpenChange={setIsNewConversationOpen}
+      />
     </div>
   );
 }

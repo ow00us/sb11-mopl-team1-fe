@@ -363,6 +363,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/users/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * DM 대상 사용자 검색
+         * @description 인증된 사용자가 이름으로 다른 사용자의 공개 프로필을 검색합니다. 본인과 잠긴 사용자는 제외합니다.
+         */
+        get: operations["searchUsers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/users/{userId}": {
         parameters: {
             query?: never;
@@ -1241,6 +1261,11 @@ export interface components {
             receiver: components["schemas"]["UserSummary"];
             /** @description 메시지 내용 */
             content: string;
+            /**
+             * Format: date-time
+             * @description 수신자가 메시지를 읽은 시간. 아직 읽지 않았으면 null
+             */
+            readAt?: string | null;
         };
         ContentCreateRequest: {
             /**
@@ -1397,6 +1422,23 @@ export interface components {
              * @enum {string}
              */
             sortDirection: "ASCENDING" | "DESCENDING";
+        };
+        CursorResponseUserSummary: {
+            /** @description 사용자 공개 프로필 목록 */
+            data: components["schemas"]["UserSummary"][];
+            /** @description 다음 이름 커서 */
+            nextCursor?: string | null;
+            /**
+             * Format: uuid
+             * @description 다음 UUID 보조 커서
+             */
+            nextIdAfter?: string | null;
+            hasNext: boolean;
+            /** Format: int64 */
+            totalCount: number;
+            sortBy: string;
+            /** @enum {string} */
+            sortDirection: "ASCENDING";
         };
         WatchingSessionDto: {
             /**
@@ -3198,6 +3240,62 @@ export interface operations {
             };
         };
     };
+    searchUsers: {
+        parameters: {
+            query: {
+                /** @description 사용자 이름 검색어 */
+                keywordLike: string;
+                /** @description 이름 정렬 커서 */
+                cursor?: string;
+                /** @description 동일 이름 내 UUID 보조 커서 */
+                idAfter?: string;
+                /** @description 한 번에 가져올 개수 */
+                limit: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 사용자 공개 프로필 검색 성공 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["CursorResponseUserSummary"];
+                };
+            };
+            /** @description 검색어나 커서가 올바르지 않음 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 인증 오류 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 서버 오류 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     findUser: {
         parameters: {
             query?: never;
@@ -4502,10 +4600,11 @@ export interface operations {
     };
     subscribe: {
         parameters: {
-            query?: {
-                LastEventId?: string;
+            query?: never;
+            header?: {
+                /** @description 마지막으로 수신한 SSE 이벤트 ID */
+                "Last-Event-ID"?: string;
             };
-            header?: never;
             path?: never;
             cookie?: never;
         };

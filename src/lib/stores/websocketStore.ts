@@ -22,7 +22,11 @@ interface WebSocketState {
   subscribe: <T>(destination: string, callback: (message: T) => void) => void;
   unsubscribe: (destination: string) => void;
   send: (destination: string, body: unknown) => void;
+  sendWithReceipt: (destination: string, body: unknown) => Promise<void>;
 }
+
+const MAX_RECONNECT_ATTEMPTS = 5;
+const SEND_RECEIPT_TIMEOUT_MS = 10_000;
 
 /**
  * 구독 생명주기를 개발 환경에서만 기록합니다.
@@ -81,6 +85,23 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => {
    */
   const desiredSubscriptions = new Map<string, (body: string) => void>();
 
+  const pendingSends = new Map<
+    string,
+    {
+      timeoutId: ReturnType<typeof setTimeout>;
+      resolve: () => void;
+      reject: (error: Error) => void;
+    }
+  >();
+
+  const rejectPendingSends = (error: Error) => {
+    pendingSends.forEach(({ timeoutId, reject }) => {
+      clearTimeout(timeoutId);
+      reject(error);
+    });
+    pendingSends.clear();
+  };
+
   /** 요청해 둔 구독을 현재 연결에 실제로 건다. */
   const openSubscription = (client: Client, destination: string, handler: (body: string) => void) => {
     const subscription = client.subscribe(destination, (message) => handler(message.body));
@@ -100,8 +121,9 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => {
     void client.deactivate();
     pendingConnect = null;
     pendingClient = null;
-    // 재연결로 해소되지 않는 상태이므로 요청해 둔 구독도 버립니다.
-    desiredSubscriptions.clear();
+    // 구독 의도는 남겨 둡니다. 사용자가 안내의 다시 연결 버튼을 누르면 같은
+    // 화면의 목적지를 새 연결에 복원해야 합니다.
+    rejectPendingSends(new Error(error.message));
     set({
       stompClient: null,
       isConnected: false,
@@ -241,11 +263,14 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => {
           Authorization: `Bearer ${accessToken}`,
         },
         reconnectDelay: 5000,
+        connectionTimeout: 10_000,
         heartbeatIncoming: 4000,
         heartbeatOutgoing: 4000,
       });
 
       const generation = ++clientGeneration;
+      let wasConnected = false;
+      let reconnectFailures = 0;
 
       pendingClient = client;
 
@@ -259,6 +284,9 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => {
       const connectionPromise = new Promise<void>((resolve, reject) => {
         client.onConnect = () => {
           if (generation !== clientGeneration) return;
+
+          wasConnected = true;
+          reconnectFailures = 0;
 
           set({
             stompClient: client,
@@ -285,6 +313,7 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => {
           if (generation !== clientGeneration) return;
 
           const error = parseStompErrorFrame(frame);
+          rejectPendingSends(new Error(error.message));
 
           if (isPermanentFailure(error)) {
             // 사용자에게는 화면이 isBlocked 를 읽어 알립니다. toast 로 띄우면
@@ -314,6 +343,30 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => {
         client.onWebSocketClose = () => {
           if (generation !== clientGeneration) return;
           if (get().isBlocked) return;
+
+          rejectPendingSends(new Error('연결이 끊어져 메시지를 전송하지 못했습니다.'));
+
+          // 정상 연결이 끊긴 시점은 재연결 실패 횟수에 포함하지 않습니다. 그 뒤
+          // 새 연결이 성립하지 못하고 다시 닫힐 때마다 한 번씩 계산합니다.
+          if (wasConnected) {
+            wasConnected = false;
+            reconnectFailures = 0;
+          } else {
+            reconnectFailures += 1;
+          }
+
+          if (reconnectFailures >= MAX_RECONNECT_ATTEMPTS) {
+            console.debug(
+              `[stomp] 자동 재연결 ${MAX_RECONNECT_ATTEMPTS}회 실패로 중단합니다.`,
+            );
+            block(client, {
+              exceptionName: 'WebSocketReconnectExhausted',
+              message: '연결이 끊어졌습니다. 다시 시도해 주세요.',
+              details: { attempts: String(MAX_RECONNECT_ATTEMPTS) },
+              errorCode: 'REALTIME_CONNECTION_FAILED',
+            });
+            return;
+          }
           // 재연결하면 서버는 구독이 없는 새 STOMP 세션을 만듭니다. Map 을 비우지
           // 않으면 화면이 다시 subscribe 해도 이미 구독 중으로 보고 건너뛰어,
           // 연결은 되었는데 메시지가 오지 않는 상태가 됩니다.
@@ -359,6 +412,7 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => {
       // 명시적 종료이므로 요청해 둔 구독도 버립니다. 남겨두면 다음 로그인에서
       // 화면이 요청하지도 않은 구독이 되살아납니다.
       desiredSubscriptions.clear();
+      rejectPendingSends(new Error('연결이 종료되어 메시지를 전송하지 못했습니다.'));
       set({
         stompClient: null,
         isConnected: false,
@@ -416,6 +470,49 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => {
       } else {
         console.error('WebSocket이 연결되어 있지 않습니다.');
       }
+    },
+
+    sendWithReceipt: (destination: string, body: unknown) => {
+      const { stompClient, isConnected } = get();
+
+      if (!stompClient || !isConnected) {
+        return Promise.reject(new Error('WebSocket이 연결되어 있지 않습니다.'));
+      }
+
+      const receiptId = `dm-send-${crypto.randomUUID()}`;
+
+      return new Promise<void>((resolve, reject) => {
+        const timeoutId = setTimeout(() => {
+          const pending = pendingSends.get(receiptId);
+          if (!pending) return;
+
+          pendingSends.delete(receiptId);
+          pending.reject(new Error('메시지 전송 확인 시간이 초과되었습니다.'));
+        }, SEND_RECEIPT_TIMEOUT_MS);
+
+        pendingSends.set(receiptId, { timeoutId, resolve, reject });
+
+        stompClient.watchForReceipt(receiptId, () => {
+          const pending = pendingSends.get(receiptId);
+          if (!pending) return;
+
+          clearTimeout(pending.timeoutId);
+          pendingSends.delete(receiptId);
+          pending.resolve();
+        });
+
+        try {
+          stompClient.publish({
+            destination,
+            headers: { receipt: receiptId },
+            body: JSON.stringify(body),
+          });
+        } catch (error) {
+          clearTimeout(timeoutId);
+          pendingSends.delete(receiptId);
+          reject(error instanceof Error ? error : new Error('메시지 전송에 실패했습니다.'));
+        }
+      });
     },
   };
 });

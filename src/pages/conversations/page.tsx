@@ -5,8 +5,9 @@ import { useAuthStore } from '@/lib/stores/useAuthStore';
 import useDirectMessageStore from '@/lib/stores/useDirectMessageStore';
 import ConversationList from './components/ConversationList';
 import MessageThread from './components/MessageThread';
+import type { FailedMessage } from './components/MessageThread';
 import EmptyState from './components/EmptyState';
-import type { DirectMessageDto } from '@/lib/types';
+import type { DirectMessageRealtimeEvent } from '@/lib/types';
 import {markDirectMessageAsRead} from "@/lib/api";
 import useConversationStore from "@/lib/stores/useConversationStore.ts";
 import { featureFlags } from '@/lib/config/features';
@@ -15,10 +16,12 @@ export default function ConversationsPage() {
   const navigate = useNavigate();
   const { conversationId: selectedConversationId  } = useParams<{ conversationId: string }>();
   const [isConnecting, setIsConnecting] = useState(false);
+  const [failedMessages, setFailedMessages] = useState<FailedMessage[]>([]);
+  const [retryingMessageIds, setRetryingMessageIds] = useState<Set<string>>(new Set());
   const {update: updateConversation} = useConversationStore();
 
   // Stores
-  const { connect, subscribe, unsubscribe, isConnected, send } = useWebSocketStore();
+  const { connect, subscribe, unsubscribe, isConnected, sendWithReceipt } = useWebSocketStore();
   const { data: authentication } = useAuthStore();
 
   // WebSocket connection and subscription
@@ -31,18 +34,36 @@ export default function ConversationsPage() {
       setIsConnecting(true);
 
       try {
-        // Connect if not already connected
-        if (!isConnected) {
-          await connect(accessToken);
-        }
+        await connect(accessToken);
 
         // Subscribe to conversation-specific message channel
-        subscribe(`/sub/conversations/${selectedConversationId}/direct-messages`, (message: DirectMessageDto) => {
-          // Add new message to store
-          useDirectMessageStore.getState().add(message);
-          markDirectMessageAsRead(selectedConversationId, message.id);
-          updateConversation(selectedConversationId, {latestMessage: message, hasUnread: false});
-        });
+        subscribe<DirectMessageRealtimeEvent>(
+          `/sub/conversations/${selectedConversationId}/direct-messages`,
+          (event) => {
+            if (event.type === 'DIRECT_MESSAGE_CREATED') {
+              const message = event.data;
+              useDirectMessageStore.getState().add(message);
+
+              // 수신 메시지만 읽음 처리합니다. 내가 보낸 메시지에 읽음 API를 호출하면
+              // 백엔드 권한 규칙상 403이므로 상대방의 이벤트를 기다립니다.
+              if (message.receiver.userId === authentication.userDto.id) {
+                void markDirectMessageAsRead(selectedConversationId, message.id).catch((error) => {
+                  console.error('Failed to mark direct message as read:', error);
+                });
+              }
+
+              updateConversation(selectedConversationId, {
+                latestMessage: message,
+                hasUnread: false,
+              });
+              return;
+            }
+
+            useDirectMessageStore.getState().update(event.data.lastReadMessageId, {
+              readAt: event.data.readAt,
+            });
+          },
+        );
       } catch (error) {
         console.error('WebSocket setup failed:', error);
       } finally {
@@ -56,7 +77,7 @@ export default function ConversationsPage() {
     return () => {
       unsubscribe(`/sub/conversations/${selectedConversationId}/direct-messages`);
     };
-  }, [selectedConversationId, authentication, isConnected, connect, subscribe, unsubscribe]);
+  }, [selectedConversationId, authentication, connect, subscribe, unsubscribe, updateConversation]);
 
   // Handle conversation selection
   const handleSelectConversation = (conversationId: string) => {
@@ -64,16 +85,48 @@ export default function ConversationsPage() {
   };
 
   // Handle sending message
+  const sendMessage = async (conversationId: string, content: string) => {
+    await sendWithReceipt(`/pub/conversations/${conversationId}/direct-messages`, { content });
+  };
+
   const handleSendMessage = (content: string) => {
     if (!selectedConversationId) return;
 
-    try {
-      send(`/pub/conversations/${selectedConversationId}/direct-messages`, {
-        content,
-      });
-    } catch (error) {
+    const conversationId = selectedConversationId;
+    void sendMessage(conversationId, content).catch((error) => {
       console.error('Failed to send message:', error);
-    }
+      setFailedMessages((current) => [
+        ...current,
+        {
+          id: crypto.randomUUID(),
+          conversationId,
+          content,
+          createdAt: new Date().toISOString(),
+        },
+      ]);
+    });
+  };
+
+  const handleRetryMessage = (messageId: string) => {
+    const failedMessage = failedMessages.find((message) => message.id === messageId);
+    if (!failedMessage || retryingMessageIds.has(messageId)) return;
+
+    setRetryingMessageIds((current) => new Set(current).add(messageId));
+
+    void sendMessage(failedMessage.conversationId, failedMessage.content)
+      .then(() => {
+        setFailedMessages((current) => current.filter((message) => message.id !== messageId));
+      })
+      .catch((error) => {
+        console.error('Failed to retry message:', error);
+      })
+      .finally(() => {
+        setRetryingMessageIds((current) => {
+          const next = new Set(current);
+          next.delete(messageId);
+          return next;
+        });
+      });
   };
 
   return (
@@ -92,6 +145,11 @@ export default function ConversationsPage() {
           <MessageThread
             conversationId={selectedConversationId}
             onSendMessage={handleSendMessage}
+            failedMessages={failedMessages.filter(
+              (message) => message.conversationId === selectedConversationId,
+            )}
+            retryingMessageIds={retryingMessageIds}
+            onRetryMessage={handleRetryMessage}
             isConnected={featureFlags.directMessageSend && isConnected && !isConnecting}
           />
         ) : (
