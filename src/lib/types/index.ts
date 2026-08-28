@@ -67,6 +67,7 @@ export type FollowDto = components['schemas']['FollowDto'];
 export type FollowRequest = components['schemas']['FollowRequest'];
 export type FollowerCountResponse = components['schemas']['FollowerCountResponse'];
 export type FollowUserItemDto = components['schemas']['FollowUserItemDto'];
+export type FollowRecommendationItemDto = components['schemas']['FollowRecommendationItemDto'];
 
 // Playlist subscriber types
 export type SubscriberItemDto = components['schemas']['SubscriberItemDto'];
@@ -100,6 +101,8 @@ export type CursorResponseDirectMessageDto = components['schemas']['CursorRespon
 export type CursorResponseNotificationDto = components['schemas']['CursorResponseNotificationDto'];
 export type CursorResponseWatchingSessionDto = components['schemas']['CursorResponseWatchingSessionDto'];
 export type CursorResponseFollowUserItemDto = components['schemas']['CursorResponseFollowUserItemDto'];
+export type CursorResponseFollowRecommendationItemDto =
+  components['schemas']['CursorResponseFollowRecommendationItemDto'];
 export type CursorResponseSubscriberItemDto = components['schemas']['CursorResponseSubscriberItemDto'];
 
 export type CursorResponse =
@@ -112,6 +115,7 @@ export type CursorResponse =
     | CursorResponseNotificationDto
     | CursorResponseWatchingSessionDto
     | CursorResponseFollowUserItemDto
+    | CursorResponseFollowRecommendationItemDto
     | CursorResponseSubscriberItemDto;
 
 
@@ -158,6 +162,8 @@ export type FindWatchingSessionsByContentParams =
 // Follow query params
 export type GetFollowersParams = operations['getFollowers']['parameters']['query'];
 export type GetFollowingsParams = operations['getFollowings']['parameters']['query'];
+export type GetFollowRecommendationsParams =
+  operations['getFollowRecommendations']['parameters']['query'];
 
 // Playlist subscriber query params
 export type GetPlaylistSubscribersParams =
@@ -174,4 +180,5 @@ export type CursorParams =
     | FindWatchingSessionsByContentParams
     | GetFollowersParams
     | GetFollowingsParams
+    | GetFollowRecommendationsParams
     | GetPlaylistSubscribersParams;

@@ -30,6 +30,16 @@ export const getPlaylists = async (params?: FindPlaylistsParams): Promise<Cursor
   return response.data;
 };
 
+/** Get playlists ordered by subscriber count. */
+export const getPopularPlaylists = async (
+  params?: Omit<FindPlaylistsParams, 'keywordLike' | 'sortBy' | 'sortDirection'>,
+): Promise<CursorResponsePlaylistDto> => {
+  const response = await apiClient.get<CursorResponsePlaylistDto>('/api/playlists/popular', {
+    params,
+  });
+  return response.data;
+};
+
 /**
  * Get single playlist (플레이리스트 단건 조회)
  * GET /api/playlists/{playlistId}
