@@ -144,6 +144,8 @@ export type FindContentsParams = operations['findContents']['parameters']['query
 
 // Playlist query params
 export type FindPlaylistsParams = operations['findPlaylists']['parameters']['query'];
+export type FindPopularPlaylistsParams =
+  operations['findPopularPlaylists']['parameters']['query'];
 
 // Review query params
 export type FindReviewsParams = operations['findReviews']['parameters']['query'];
@@ -173,6 +175,7 @@ export type CursorParams =
     FindUsersParams
     | FindContentsParams
     | FindPlaylistsParams
+    | FindPopularPlaylistsParams
     | FindReviewsParams
     | FindConversationsParams
     | FindDmsParams
