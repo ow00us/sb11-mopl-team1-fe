@@ -11,6 +11,7 @@ import icStarFull from '@/assets/ic_star_full.svg';
 import defaultProfileImg from '@/assets/ic_profile_default.svg';
 import ConfirmDialog from '@/components/ui/confirm-dialog';
 import { Button } from '@/components/ui/button';
+import SubscriberListDialog from './components/SubscriberListDialog';
 
 export default function PlaylistDetailPage() {
   const { playlistId } = useParams<{ playlistId: string }>();
@@ -29,6 +30,7 @@ export default function PlaylistDetailPage() {
 
   // Delete dialog state
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showSubscribers, setShowSubscribers] = useState(false);
 
   // Fetch playlist data
   const fetchPlaylist = async () => {
@@ -207,12 +209,12 @@ export default function PlaylistDetailPage() {
 
             {/* Subscriber Count and Actions */}
             <div className="flex items-center gap-3">
-              <div className="flex items-center gap-1.5">
+              <button type="button" onClick={() => setShowSubscribers(true)} className="flex items-center gap-1.5 hover:text-white">
                 <img src={icStarFull} alt="" className="w-4 h-4" />
                 <span className="text-body1-m text-gray-200">
                   구독자 {playlist.subscriberCount.toLocaleString()}명
                 </span>
-              </div>
+              </button>
               <PlaylistActions
                 playlist={playlist}
                 isOwner={isOwner}
@@ -279,6 +281,7 @@ export default function PlaylistDetailPage() {
         cancelText="취소"
         variant="destructive"
       />
+      <SubscriberListDialog open={showSubscribers} onOpenChange={setShowSubscribers} playlistId={playlistId!} />
     </div>
   );
 }

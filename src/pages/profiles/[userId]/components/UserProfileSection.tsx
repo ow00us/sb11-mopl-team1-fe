@@ -16,6 +16,7 @@ import type {WatchingSessionDto} from "@/lib/types";
 import {useNavigate} from "react-router-dom";
 import useUserProfileStore from "@/lib/stores/useUserProfileStore.ts";
 import useAuthStore from "@/lib/stores/useAuthStore.ts";
+import FollowRecommendationSection from '@/pages/profiles/components/FollowRecommendationSection';
 
 export default function UserProfileSection({userId}: {userId: string}) {
   const navigate = useNavigate();
@@ -391,6 +392,7 @@ export default function UserProfileSection({userId}: {userId: string}) {
             )}
           </div>
         </div>
+        {isOwnProfile && <FollowRecommendationSection />}
       </>
   )
 }

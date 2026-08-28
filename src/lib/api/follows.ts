@@ -16,6 +16,8 @@ import type {
   FollowerCountResponse,
   GetFollowersParams,
   GetFollowingsParams,
+  CursorResponseFollowRecommendationItemDto,
+  GetFollowRecommendationsParams,
 } from '@/lib/types';
 
 /**
@@ -113,6 +115,17 @@ export const getFollowings = async (
 ): Promise<CursorResponseFollowUserItemDto> => {
   const response = await apiClient.get<CursorResponseFollowUserItemDto>(
     '/api/follows/followings',
+    { params },
+  );
+  return response.data;
+};
+
+/** Get friend-of-friend follow recommendations. */
+export const getFollowRecommendations = async (
+  params: GetFollowRecommendationsParams,
+): Promise<CursorResponseFollowRecommendationItemDto> => {
+  const response = await apiClient.get<CursorResponseFollowRecommendationItemDto>(
+    '/api/follows/recommendations',
     { params },
   );
   return response.data;
