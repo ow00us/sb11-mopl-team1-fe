@@ -78,6 +78,14 @@ export const createUser = async (data: UserCreateRequest): Promise<UserDto> => {
 };
 
 /**
+ * 현재 인증된 사용자가 본인 계정을 탈퇴합니다.
+ * DELETE /api/users/{userId}
+ */
+export const withdrawUser = async (userId: string): Promise<void> => {
+  await apiClient.delete(`/api/users/${userId}`);
+};
+
+/**
  * Update user profile (프로필 변경)
  * PATCH /api/users/{userId}
  *

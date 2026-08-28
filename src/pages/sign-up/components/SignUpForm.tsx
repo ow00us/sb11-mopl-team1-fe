@@ -16,6 +16,20 @@ interface SignUpFormData {
   passwordConfirmation: string;
 }
 
+const PASSWORD_SPECIAL_CHARACTERS = '!@#$%^&*()_+-={}[]|:;"\'<>,.?/~`';
+
+const isPasswordValid = (value: string): boolean =>
+  /[A-Za-z]/.test(value) &&
+  /\d/.test(value) &&
+  [...value].some((character) =>
+    PASSWORD_SPECIAL_CHARACTERS.includes(character),
+  ) &&
+  [...value].every(
+    (character) =>
+      /[A-Za-z\d]/.test(character) ||
+      PASSWORD_SPECIAL_CHARACTERS.includes(character),
+  );
+
 export default function SignUpForm() {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
@@ -122,6 +136,10 @@ export default function SignUpForm() {
             id="password"
             type="password"
             placeholder="비밀번호 입력"
+            minLength={8}
+            maxLength={72}
+            autoComplete="new-password"
+            aria-describedby="password-policy"
             className={cn(
               'h-[54px] rounded-xl border-[1.5px]',
               errors.password ? 'border-[#c93c3f]' : 'border-gray-800',
@@ -133,9 +151,19 @@ export default function SignUpForm() {
                 value: 8,
                 message: '비밀번호는 최소 8자 이상이어야 합니다',
               },
+              maxLength: {
+                value: 72,
+                message: '비밀번호는 최대 72자까지 입력할 수 있습니다',
+              },
+              validate: (value) =>
+                isPasswordValid(value) ||
+                '비밀번호에는 영문, 숫자, 특수문자가 각각 하나 이상 필요합니다',
             })}
             disabled={isLoading}
           />
+          <p id="password-policy" className="px-2 text-body3-m text-gray-500">
+            영문, 숫자, 특수문자를 포함해 8자 이상 입력해주세요.
+          </p>
           {errors.password && (
             <p className="px-2 text-body3-m text-red-notification">{errors.password.message}</p>
           )}
@@ -152,6 +180,8 @@ export default function SignUpForm() {
             id="passwordConfirmation"
             type="password"
             placeholder="한 번 더 입력해주세요"
+            maxLength={72}
+            autoComplete="new-password"
             className={cn(
               'h-[54px] rounded-xl border-[1.5px]',
               errors.passwordConfirmation ? 'border-[#c93c3f]' : 'border-gray-800',

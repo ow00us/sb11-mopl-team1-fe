@@ -8,6 +8,8 @@ import OAuthAccountSection
   from '@/pages/profiles/[userId]/components/OAuthAccountSection';
 import LocalCredentialSection
   from '@/pages/profiles/[userId]/components/LocalCredentialSection';
+import AccountWithdrawalSection
+  from '@/pages/profiles/[userId]/components/AccountWithdrawalSection';
 import useAuthStore from '@/lib/stores/useAuthStore';
 
 
@@ -45,6 +47,9 @@ export default function ProfilePage() {
         )}
         <OwnedPlaylistsSection userId={userId}/>
         <SubscribedPlaylistSection userId={userId}/>
+        {authenticatedUserId === userId && (
+          <AccountWithdrawalSection userId={userId} />
+        )}
       </div>
     </div>
   );
