@@ -15,6 +15,7 @@ import type {
   CursorResponsePlaylistDto,
   CursorResponseSubscriberItemDto,
   FindPlaylistsParams,
+  FindPopularPlaylistsParams,
   GetPlaylistSubscribersParams,
 } from '@/lib/types';
 
@@ -32,7 +33,7 @@ export const getPlaylists = async (params?: FindPlaylistsParams): Promise<Cursor
 
 /** Get playlists ordered by subscriber count. */
 export const getPopularPlaylists = async (
-  params?: Omit<FindPlaylistsParams, 'keywordLike' | 'sortBy' | 'sortDirection'>,
+  params?: FindPopularPlaylistsParams,
 ): Promise<CursorResponsePlaylistDto> => {
   const response = await apiClient.get<CursorResponsePlaylistDto>('/api/playlists/popular', {
     params,
