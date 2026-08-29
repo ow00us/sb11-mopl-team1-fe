@@ -37,19 +37,23 @@ function getNotificationIconBgColor(level: NotificationLevel): string {
 
 interface NotificationItemProps {
   notification: NotificationDto;
-  onRead: (id: string) => void;
+  onRead: (id: string, readAt: string) => void;
   onNavigate: (path: string) => void;
 }
 
 function NotificationItem({ notification, onRead, onNavigate }: NotificationItemProps) {
+  const isUnread = !notification.readAt;
+
   const handleClick = async () => {
     // 읽음 처리가 실패해도 이동은 막지 않습니다. 알림을 눌렀는데 화면이 그대로면
     // 사용자는 무엇이 잘못됐는지 알 수 없습니다.
-    try {
-      await markNotificationAsRead(notification.id);
-      onRead(notification.id);
-    } catch (error) {
-      console.error('Failed to mark notification as read:', error);
+    if (isUnread) {
+      try {
+        await markNotificationAsRead(notification.id);
+        onRead(notification.id, new Date().toISOString());
+      } catch (error) {
+        console.error('Failed to mark notification as read:', error);
+      }
     }
 
     // 모르는 유형이거나 대상이 없으면 읽음 처리만 하고 머무릅니다.
@@ -59,7 +63,9 @@ function NotificationItem({ notification, onRead, onNavigate }: NotificationItem
 
   return (
     <div
-      className="flex flex-col gap-3.5 border-b border-gray-800 p-6 cursor-pointer hover:bg-gray-900/30 transition-colors"
+      className={`flex cursor-pointer flex-col gap-3.5 border-b border-gray-800 p-6 transition-colors hover:bg-gray-900/50 ${
+        isUnread ? 'bg-gray-900/35' : 'bg-transparent'
+      }`}
       onClick={handleClick}
     >
       <div className="flex items-start justify-between gap-1 w-full">
@@ -76,7 +82,9 @@ function NotificationItem({ notification, onRead, onNavigate }: NotificationItem
           {/* Content */}
           <div className="flex flex-col gap-1.5 flex-1 min-w-0">
             <div className="flex items-start gap-0.5">
-              <p className="text-body1-m text-gray-200 truncate">{notification.title}</p>
+              <p className={`text-body1-m truncate ${isUnread ? 'text-gray-100' : 'text-gray-400'}`}>
+                {notification.title}
+              </p>
             </div>
             <p className="text-body3-m text-gray-500">
               {formatRelativeTime(notification.createdAt)}
@@ -84,14 +92,18 @@ function NotificationItem({ notification, onRead, onNavigate }: NotificationItem
           </div>
         </div>
 
-        {/* Unread indicator - always show red dot for all notifications in the list */}
-        <div className="bg-red-notification rounded-full size-2 shrink-0 mt-2" />
+        {isUnread && (
+          <div
+            className="mt-2 size-2 shrink-0 rounded-full bg-red-notification"
+            aria-label="읽지 않은 알림"
+          />
+        )}
       </div>
 
       {/* Additional content message if exists */}
       {notification.content && (
-        <div className="bg-gray-800/50 rounded-2xl px-5 py-3.5">
-          <p className="text-body2-m-140 text-gray-300 line-clamp-2">
+        <div className={`rounded-2xl px-5 py-3.5 ${isUnread ? 'bg-gray-800/60' : 'bg-gray-800/30'}`}>
+          <p className={`text-body2-m-140 line-clamp-2 ${isUnread ? 'text-gray-300' : 'text-gray-500'}`}>
             {notification.content}
           </p>
         </div>
@@ -152,8 +164,8 @@ export default function NotificationDropdown({ onClose }: NotificationDropdownPr
     };
   }, [hasNext, loading, fetchMore]);
 
-  const handleNotificationRead = (id: string) => {
-    useNotificationStore.getState().delete(id);
+  const handleNotificationRead = (id: string, readAt: string) => {
+    useNotificationStore.getState().markRead(id, readAt);
   };
 
   return (

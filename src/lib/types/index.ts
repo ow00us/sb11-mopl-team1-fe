@@ -52,10 +52,18 @@ export type ReviewUpdateRequest = components['schemas']['ReviewUpdateRequest'];
 export type ConversationDto = components['schemas']['ConversationDto'];
 export type ConversationCreateRequest = components['schemas']['ConversationCreateRequest'];
 export type DirectMessageDto = components['schemas']['DirectMessageDto'];
+export type DirectMessageSendRequest = {
+  clientMessageId: string;
+  content: string;
+};
 export type DirectMessageReadEvent = {
   conversationId: string;
   readerId: string;
-  lastReadMessageId: string;
+  /** 서버 PR #405의 현재 필드명입니다. */
+  lastReadMessageId?: string;
+  /** 도메인 전달 계약에서 사용하는 호환 필드명입니다. */
+  directMessageId?: string;
+  lastReadMessageSequence: number;
   readAt: string;
 };
 export type DirectMessageRealtimeEvent =

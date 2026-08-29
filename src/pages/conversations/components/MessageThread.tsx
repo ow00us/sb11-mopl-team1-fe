@@ -10,33 +10,28 @@ import useConversationDetailStore from "@/lib/stores/useConversationDetailStore.
 import {markDirectMessageAsRead} from "@/lib/api";
 import useConversationStore from "@/lib/stores/useConversationStore.ts";
 import {useNavigate} from "react-router-dom";
+import useNotificationStore from '@/lib/stores/useNotificationStore';
+import type { OutgoingMessage } from '../outgoingMessageState';
 
 interface MessageThreadProps {
   conversationId: string;
   onSendMessage: (content: string) => void;
-  failedMessages: FailedMessage[];
+  outgoingMessages: OutgoingMessage[];
   retryingMessageIds: Set<string>;
-  onRetryMessage: (messageId: string) => void;
+  onRetryMessage: (clientMessageId: string) => void;
   isConnected: boolean;
-}
-
-export interface FailedMessage {
-  id: string;
-  conversationId: string;
-  content: string;
-  createdAt: string;
 }
 
 export default function MessageThread({
   conversationId,
   onSendMessage,
-  failedMessages,
+  outgoingMessages,
   retryingMessageIds,
   onRetryMessage,
   isConnected,
 }: MessageThreadProps) {
   const { data: conversation, updateParams: updateConversationDetailParam, clearData: clearConversationDetailData } = useConversationDetailStore();
-  const { data: messages, loading, updateParams, clearData, fetchMore, hasNext } = useDirectMessageStore();
+  const { data: messages, loading, updateParams, clearData, fetch, fetchMore, hasNext } = useDirectMessageStore();
   const { data: authentication } = useAuthStore();
   const { update: updateConversation } = useConversationStore();
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -46,6 +41,8 @@ export default function MessageThread({
   const pendingRestoreRef = useRef<{ height: number; top: number } | null>(null);
   /** 이번 렌더는 과거 메시지가 붙은 것이므로 맨 아래로 내리지 않습니다. */
   const skipAutoScrollRef = useRef(false);
+  const hasConnectedRef = useRef(false);
+  const disconnectedAfterConnectRef = useRef(false);
   const navigate = useNavigate();
 
   // Fetch messages when conversation changes
@@ -62,6 +59,27 @@ export default function MessageThread({
     };
   }, [conversationId, updateParams, clearData, updateConversationDetailParam, clearConversationDetailData]);
 
+  // STOMP 재접속 뒤에는 REST 응답의 readAt을 다시 받아, 연결이 끊긴 동안의
+  // 읽음 이벤트를 놓쳤더라도 서버 상태로 복구합니다.
+  useEffect(() => {
+    hasConnectedRef.current = false;
+    disconnectedAfterConnectRef.current = false;
+  }, [conversationId]);
+
+  useEffect(() => {
+    if (!isConnected) {
+      if (hasConnectedRef.current) disconnectedAfterConnectRef.current = true;
+      return;
+    }
+
+    if (hasConnectedRef.current && disconnectedAfterConnectRef.current) {
+      void fetch({ ignoreLoading: true });
+    }
+
+    hasConnectedRef.current = true;
+    disconnectedAfterConnectRef.current = false;
+  }, [fetch, isConnected]);
+
   useEffect(() => {
     const latestMessage = conversation?.latestMessage;
     const currentUserId = authentication?.userDto.id;
@@ -72,10 +90,15 @@ export default function MessageThread({
       && latestMessage.receiver.userId === currentUserId
       && !latestMessage.readAt
     ) {
-      void markDirectMessageAsRead(conversation.id, latestMessage.id).catch((error) => {
-        console.error('Failed to mark direct message as read:', error);
-      });
-      updateConversation(conversation.id, { hasUnread: false });
+      void markDirectMessageAsRead(conversation.id, latestMessage.id)
+        .then(() => {
+          const readAt = new Date().toISOString();
+          updateConversation(conversation.id, { hasUnread: false });
+          useNotificationStore.getState().markConversationRead(conversation.id, readAt);
+        })
+        .catch((error) => {
+          console.error('Failed to mark direct message as read:', error);
+        });
     }
   }, [authentication?.userDto.id, conversation, updateConversation]);
 
@@ -96,7 +119,7 @@ export default function MessageThread({
     // 아래 자동 하단 스크롤 effect 가 이번 렌더에는 끼어들지 않게 합니다.
     skipAutoScrollRef.current = true;
     isLoadingMoreRef.current = false;
-  }, [failedMessages.length, messages]);
+  }, [outgoingMessages.length, messages]);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -202,11 +225,11 @@ export default function MessageThread({
         ref={containerRef}
         className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-gray-900"
       >
-        {loading && displayMessages.length === 0 && failedMessages.length === 0 ? (
+        {loading && displayMessages.length === 0 && outgoingMessages.length === 0 ? (
           <div className="flex items-center justify-center h-full">
             <div className="w-8 h-8 border-2 border-gray-600 border-t-gray-300 rounded-full animate-spin" />
           </div>
-        ) : displayMessages.length === 0 && failedMessages.length === 0 ? (
+        ) : displayMessages.length === 0 && outgoingMessages.length === 0 ? (
           <div className="flex items-center justify-center h-full">
             <p className="text-body2-m text-gray-500">메시지가 없습니다.</p>
           </div>
@@ -243,13 +266,14 @@ export default function MessageThread({
                   />
                 );
               })}
-              {failedMessages.map((message) => (
+              {outgoingMessages.map((message) => (
                 <FailedMessageBubble
-                  key={message.id}
+                  key={message.clientMessageId}
                   content={message.content}
                   createdAt={message.createdAt}
-                  retrying={retryingMessageIds.has(message.id)}
-                  onRetry={() => onRetryMessage(message.id)}
+                  status={message.status}
+                  retrying={retryingMessageIds.has(message.clientMessageId)}
+                  onRetry={() => onRetryMessage(message.clientMessageId)}
                 />
               ))}
               <div ref={messagesEndRef} />

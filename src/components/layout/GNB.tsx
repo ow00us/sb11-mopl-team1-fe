@@ -26,11 +26,16 @@ export default function GNB() {
   const { toggleSideMenu } = useUIStore();
   const navigate = useNavigate();
   const { data: authentication, signOut } = useAuthStore();
-  const { count, fetch: fetchNotifications, clear: clearNotifications } = useNotificationStore();
+  const {
+    unreadCount,
+    fetch: fetchNotifications,
+    clear: clearNotifications,
+  } = useNotificationStore();
   const { connect, subscribe, unsubscribe, isConnected } = useSseStore();
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const [isContentFormOpen, setIsContentFormOpen] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
+  const notificationBadgeCount = unreadCount();
 
   useEffect(() => {
     fetchNotifications();
@@ -139,10 +144,10 @@ export default function GNB() {
                 onClick={toggleNotification}
               >
                 <img src={icBell} alt="" className="size-full" />
-                {count() > 0 && (
+                {notificationBadgeCount > 0 && (
                   <div className="absolute -right-0.5 -top-0.5 flex size-4 items-center justify-center rounded-full bg-red-notification">
                     <span className="text-[9px] font-bold leading-none text-gray-100">
-                      {count() > 99 ? '99+' : count()}
+                      {notificationBadgeCount > 99 ? '99+' : notificationBadgeCount}
                     </span>
                   </div>
                 )}

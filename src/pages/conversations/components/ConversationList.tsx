@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useInView } from 'react-intersection-observer';
 import useConversationStore from '@/lib/stores/useConversationStore';
 import { useSseStore } from '@/lib/stores/sseStore';
@@ -9,6 +9,7 @@ import type { DirectMessageDto } from '@/lib/types';
 import { featureFlags } from '@/lib/config/features';
 import { MessageSquarePlus } from 'lucide-react';
 import NewConversationDialog from './NewConversationDialog';
+import { useAuthStore } from '@/lib/stores/useAuthStore';
 
 interface ConversationListProps {
   selectedConversationId?: string;
@@ -19,7 +20,10 @@ export default function ConversationList({ selectedConversationId, onSelectConve
   const [searchQuery, setSearchQuery] = useState('');
   const [isNewConversationOpen, setIsNewConversationOpen] = useState(false);
   const { data: conversations, loading, fetch, fetchMore, hasNext, updateParams } = useConversationStore();
-  const { subscribe, unsubscribe } = useSseStore();
+  const { subscribe, unsubscribe, isConnected } = useSseStore();
+  const currentUserId = useAuthStore((state) => state.data?.userDto.id);
+  const hasConnectedRef = useRef(false);
+  const disconnectedAfterConnectRef = useRef(false);
 
   // Infinite scroll sentinel
   const { ref: sentinelRef, inView } = useInView({
@@ -31,6 +35,21 @@ export default function ConversationList({ selectedConversationId, onSelectConve
   useEffect(() => {
     fetch();
   }, [fetch]);
+
+  // SSE 재접속 뒤에는 놓친 이벤트를 추측하지 않고 서버 hasUnread로 복구합니다.
+  useEffect(() => {
+    if (!isConnected) {
+      if (hasConnectedRef.current) disconnectedAfterConnectRef.current = true;
+      return;
+    }
+
+    if (hasConnectedRef.current && disconnectedAfterConnectRef.current) {
+      void fetch({ ignoreLoading: true });
+    }
+
+    hasConnectedRef.current = true;
+    disconnectedAfterConnectRef.current = false;
+  }, [fetch, isConnected]);
 
   // Subscribe to direct messages SSE
   useEffect(() => {
@@ -47,9 +66,14 @@ export default function ConversationList({ selectedConversationId, onSelectConve
 
       if (existingConversation) {
         // Update existing conversation with new message
+        const isIncoming = message.receiver.userId === currentUserId;
         useConversationStore.getState().update(conversationId, {
           latestMessage: message,
-          hasUnread: selectedConversationId !== conversationId, // Only mark unread if not selected
+          // 비활성 대화의 수신 메시지만 미읽음으로 올립니다. 현재 대화는 읽음
+          // API 성공 처리자가 false로 내리며, 그 전에는 기존 서버 상태를 보존합니다.
+          hasUnread: isIncoming && selectedConversationId !== conversationId
+            ? true
+            : existingConversation.hasUnread,
         });
       } else {
         // Fetch full conversation data and add to list
@@ -65,7 +89,7 @@ export default function ConversationList({ selectedConversationId, onSelectConve
     return () => {
       unsubscribe('direct-messages');
     };
-  }, [subscribe, unsubscribe, selectedConversationId]);
+  }, [currentUserId, subscribe, unsubscribe, selectedConversationId]);
 
   // Fetch more when sentinel is in view
   useEffect(() => {

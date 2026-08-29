@@ -6221,6 +6221,14 @@
             ],
             "format": "date-time",
             "description": "수신자가 메시지를 읽은 시간. 아직 읽지 않았으면 null"
+          },
+          "clientMessageId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "프론트가 전송 요청에 부여한 메시지 상관관계 ID"
           }
         },
         "required": [
@@ -6984,6 +6992,11 @@
             "format": "int64",
             "description": "총 데이터 개수"
           },
+          "unreadCount": {
+            "type": "integer",
+            "format": "int64",
+            "description": "읽지 않은 알림의 총 개수"
+          },
           "sortBy": {
             "type": "string",
             "description": "정렬 기준"
@@ -7002,7 +7015,8 @@
           "hasNext",
           "sortBy",
           "sortDirection",
-          "totalCount"
+          "totalCount",
+          "unreadCount"
         ]
       },
       "NotificationDto": {
@@ -7060,6 +7074,14 @@
             ],
             "format": "uuid",
             "description": "알림 클릭 시 이동할 대상 리소스 ID"
+          },
+          "readAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "알림을 읽은 시각. 읽지 않은 알림이면 null"
           }
         },
         "required": [

@@ -83,4 +83,6 @@ export interface CursorState {
   nextIdAfter?: string;
   hasNext: boolean;
   totalCount: number;
+  /** 알림 목록 응답에서만 제공되는 미읽음 개수입니다. */
+  unreadCount?: number;
 }

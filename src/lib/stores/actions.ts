@@ -1,6 +1,11 @@
 import type {BaseStore, CursorState, ListStore, PaginatedStore} from "@/lib/stores/types.ts";
 import type {CursorParams, CursorResponse} from "@/lib/api";
 
+const getUnreadCount = (response: CursorResponse): number | undefined =>
+  'unreadCount' in response && typeof response.unreadCount === 'number'
+    ? response.unreadCount
+    : undefined;
+
 type SetType<S> = {
   (partial: S | Partial<S> | ((state: S) => S | Partial<S>), replace?: false | undefined): void;
 }
@@ -302,6 +307,7 @@ export function createPaginatedStoreActions<T, P extends CursorParams>(
             nextIdAfter: result.nextIdAfter ?? undefined,
             hasNext: result.hasNext == undefined ? false : result.hasNext,
             totalCount: result.totalCount == undefined ? 0 : result.totalCount,
+            unreadCount: getUnreadCount(result),
           },
         });
 
@@ -346,6 +352,7 @@ export function createPaginatedStoreActions<T, P extends CursorParams>(
             nextIdAfter: result.nextIdAfter ?? undefined,
             hasNext: result.hasNext == undefined ? false : result.hasNext,
             totalCount: result.totalCount == undefined ? 0 : result.totalCount,
+            unreadCount: getUnreadCount(result) ?? cursorState.unreadCount,
           },
         });
 

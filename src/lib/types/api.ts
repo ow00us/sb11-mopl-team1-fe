@@ -1308,6 +1308,11 @@ export interface components {
              * @description 수신자가 메시지를 읽은 시간. 아직 읽지 않았으면 null
              */
             readAt?: string | null;
+            /**
+             * Format: uuid
+             * @description 프론트가 전송 요청에 부여한 메시지 상관관계 ID
+             */
+            clientMessageId?: string | null;
         };
         ContentCreateRequest: {
             /**
@@ -1644,6 +1649,11 @@ export interface components {
              * @description 총 데이터 개수
              */
             totalCount: number;
+            /**
+             * Format: int64
+             * @description 읽지 않은 알림의 총 개수
+             */
+            unreadCount: number;
             /** @description 정렬 기준 */
             sortBy: string;
             /**
@@ -1687,6 +1697,11 @@ export interface components {
              * @description 알림 클릭 시 이동할 대상 리소스 ID
              */
             resourceId?: string | null;
+            /**
+             * Format: date-time
+             * @description 알림을 읽은 시각. 읽지 않은 알림이면 null
+             */
+            readAt?: string | null;
         };
         CursorResponseConversationDto: {
             /** @description 데이터 목록 */

@@ -1,6 +1,7 @@
 interface FailedMessageBubbleProps {
   content: string;
   createdAt: string;
+  status: 'pending' | 'failed';
   retrying: boolean;
   onRetry: () => void;
 }
@@ -17,22 +18,31 @@ const formatTime = (dateString: string) => {
 export default function FailedMessageBubble({
   content,
   createdAt,
+  status,
   retrying,
   onRetry,
 }: FailedMessageBubbleProps) {
+  const isFailed = status === 'failed';
+
   return (
     <div className="flex min-w-0 items-end justify-end gap-1.5 px-[30px]">
       <div className="flex shrink-0 flex-col items-end gap-0.5 px-0 py-1">
         <div className="flex items-center gap-1.5">
-          <span className="text-caption1-m text-red-notification">전송 실패</span>
-          <button
-            type="button"
-            onClick={onRetry}
-            disabled={retrying}
-            className="text-caption1-m text-gray-300 underline underline-offset-2 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            재시도
-          </button>
+          <span className={isFailed
+            ? 'text-caption1-m text-red-notification'
+            : 'text-caption1-m text-gray-500'}>
+            {isFailed ? '전송 실패' : '전송 중'}
+          </span>
+          {isFailed && (
+            <button
+              type="button"
+              onClick={onRetry}
+              disabled={retrying}
+              className="text-caption1-m text-gray-300 underline underline-offset-2 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              재시도
+            </button>
+          )}
         </div>
         <span className="text-caption1-m text-gray-600">{formatTime(createdAt)}</span>
       </div>
