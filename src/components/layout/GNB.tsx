@@ -6,7 +6,7 @@ import icPlus from '@/assets/ic_plus.svg';
 import icBell from '@/assets/ic_bell.svg';
 import icProfileDefault from '@/assets/ic_profile_default.svg';
 import useUIStore from '@/lib/stores/useUIStore';
-import {useNavigate} from "react-router-dom";
+import {useLocation, useNavigate} from "react-router-dom";
 import {useAuthStore} from "@/lib/stores/useAuthStore.ts";
 import useNotificationStore from '@/lib/stores/useNotificationStore';
 import { useSseStore } from '@/lib/stores/sseStore';
@@ -21,16 +21,23 @@ import {
 import type { NotificationDto } from '@/lib/types';
 import { featureFlags } from '@/lib/config/features';
 import { disconnectRealtimeClients } from '@/lib/api/init';
+import { markNotificationAsRead } from '@/lib/api/notifications';
 
 export default function GNB() {
   const { toggleSideMenu } = useUIStore();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const { data: authentication, signOut } = useAuthStore();
-  const { count, fetch: fetchNotifications, clear: clearNotifications } = useNotificationStore();
+  const {
+    cursorState,
+    fetch: fetchNotifications,
+    clear: clearNotifications,
+  } = useNotificationStore();
   const { connect, subscribe, unsubscribe, isConnected } = useSseStore();
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const [isContentFormOpen, setIsContentFormOpen] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
+  const unreadNotificationCount = cursorState.unreadCount ?? 0;
 
   useEffect(() => {
     fetchNotifications();
@@ -50,8 +57,23 @@ export default function GNB() {
       }
 
       // Subscribe to "notifications" topic
-      subscribe('notifications', (newNotification: NotificationDto) => {
-        // Add new notification to store
+      subscribe('notifications', async (newNotification: NotificationDto) => {
+        const activeConversationId =
+          pathname.match(/^\/conversations\/([^/]+)$/)?.[1];
+
+        if (
+          newNotification.type === 'DIRECT_MESSAGE'
+          && newNotification.resourceId === activeConversationId
+        ) {
+          try {
+            await markNotificationAsRead(newNotification.id);
+            await useNotificationStore.getState().fetch({ ignoreLoading: true });
+            return;
+          } catch (error) {
+            console.error('Failed to mark active conversation notification as read:', error);
+          }
+        }
+
         useNotificationStore.getState().add(newNotification);
       });
     };
@@ -62,7 +84,7 @@ export default function GNB() {
     return () => {
       unsubscribe('notifications');
     };
-  }, [authentication, isConnected, connect, subscribe, unsubscribe]);
+  }, [authentication, isConnected, connect, subscribe, unsubscribe, pathname]);
 
   const handleLogout = async () => {
     if (isSigningOut) return;
@@ -139,10 +161,10 @@ export default function GNB() {
                 onClick={toggleNotification}
               >
                 <img src={icBell} alt="" className="size-full" />
-                {count() > 0 && (
+                {unreadNotificationCount > 0 && (
                   <div className="absolute -right-0.5 -top-0.5 flex size-4 items-center justify-center rounded-full bg-red-notification">
                     <span className="text-[9px] font-bold leading-none text-gray-100">
-                      {count() > 99 ? '99+' : count()}
+                      {unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}
                     </span>
                   </div>
                 )}

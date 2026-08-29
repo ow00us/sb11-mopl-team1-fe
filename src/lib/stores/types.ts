@@ -83,4 +83,5 @@ export interface CursorState {
   nextIdAfter?: string;
   hasNext: boolean;
   totalCount: number;
+  unreadCount?: number;
 }

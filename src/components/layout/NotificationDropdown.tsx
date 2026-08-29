@@ -37,19 +37,19 @@ function getNotificationIconBgColor(level: NotificationLevel): string {
 
 interface NotificationItemProps {
   notification: NotificationDto;
-  onRead: (id: string) => void;
+  onRead: (id: string, readAt: string) => void;
   onNavigate: (path: string) => void;
 }
 
 function NotificationItem({ notification, onRead, onNavigate }: NotificationItemProps) {
   const handleClick = async () => {
-    // 읽음 처리가 실패해도 이동은 막지 않습니다. 알림을 눌렀는데 화면이 그대로면
-    // 사용자는 무엇이 잘못됐는지 알 수 없습니다.
-    try {
-      await markNotificationAsRead(notification.id);
-      onRead(notification.id);
-    } catch (error) {
-      console.error('Failed to mark notification as read:', error);
+    if (!notification.readAt) {
+      try {
+        await markNotificationAsRead(notification.id);
+        onRead(notification.id, new Date().toISOString());
+      } catch (error) {
+        console.error('Failed to mark notification as read:', error);
+      }
     }
 
     // 모르는 유형이거나 대상이 없으면 읽음 처리만 하고 머무릅니다.
@@ -84,8 +84,9 @@ function NotificationItem({ notification, onRead, onNavigate }: NotificationItem
           </div>
         </div>
 
-        {/* Unread indicator - always show red dot for all notifications in the list */}
-        <div className="bg-red-notification rounded-full size-2 shrink-0 mt-2" />
+        {!notification.readAt && (
+          <div className="bg-red-notification rounded-full size-2 shrink-0 mt-2" />
+        )}
       </div>
 
       {/* Additional content message if exists */}
@@ -152,8 +153,10 @@ export default function NotificationDropdown({ onClose }: NotificationDropdownPr
     };
   }, [hasNext, loading, fetchMore]);
 
-  const handleNotificationRead = (id: string) => {
-    useNotificationStore.getState().delete(id);
+  const handleNotificationRead = (id: string, readAt: string) => {
+    const notificationStore = useNotificationStore.getState();
+    notificationStore.update(id, { readAt });
+    void notificationStore.fetch({ ignoreLoading: true });
   };
 
   return (

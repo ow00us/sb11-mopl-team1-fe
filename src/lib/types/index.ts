@@ -51,11 +51,14 @@ export type ReviewUpdateRequest = components['schemas']['ReviewUpdateRequest'];
 // Conversation & Direct Message types
 export type ConversationDto = components['schemas']['ConversationDto'];
 export type ConversationCreateRequest = components['schemas']['ConversationCreateRequest'];
-export type DirectMessageDto = components['schemas']['DirectMessageDto'];
+export type DirectMessageDto = components['schemas']['DirectMessageDto'] & {
+  clientMessageId?: string | null;
+};
 export type DirectMessageReadEvent = {
   conversationId: string;
   readerId: string;
   lastReadMessageId: string;
+  lastReadMessageSequence: number;
   readAt: string;
 };
 export type DirectMessageRealtimeEvent =
@@ -73,7 +76,9 @@ export type FollowRecommendationItemDto = components['schemas']['FollowRecommend
 export type SubscriberItemDto = components['schemas']['SubscriberItemDto'];
 
 // Notification types
-export type NotificationDto = components['schemas']['NotificationDto'];
+export type NotificationDto = components['schemas']['NotificationDto'] & {
+  readAt?: string | null;
+};
 
 // Watching Session types
 export type WatchingSessionDto = components['schemas']['WatchingSessionDto'];
@@ -98,7 +103,11 @@ export type CursorResponsePlaylistDto = components['schemas']['CursorResponsePla
 export type CursorResponseReviewDto = components['schemas']['CursorResponseReviewDto'];
 export type CursorResponseConversationDto = components['schemas']['CursorResponseConversationDto'];
 export type CursorResponseDirectMessageDto = components['schemas']['CursorResponseDirectMessageDto'];
-export type CursorResponseNotificationDto = components['schemas']['CursorResponseNotificationDto'];
+export type CursorResponseNotificationDto =
+  Omit<components['schemas']['CursorResponseNotificationDto'], 'data'> & {
+    data: NotificationDto[];
+    unreadCount: number;
+  };
 export type CursorResponseWatchingSessionDto = components['schemas']['CursorResponseWatchingSessionDto'];
 export type CursorResponseFollowUserItemDto = components['schemas']['CursorResponseFollowUserItemDto'];
 export type CursorResponseFollowRecommendationItemDto =
