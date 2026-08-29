@@ -67,9 +67,6 @@ const getRequestPath = (config: InternalAxiosRequestConfig): string => {
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
   timeout: 30000,
-  xsrfCookieName: 'XSRF-TOKEN',
-  xsrfHeaderName: 'X-XSRF-TOKEN',
-  withXSRFToken: true,
   headers: {
     'Content-Type': 'application/json',
   },
