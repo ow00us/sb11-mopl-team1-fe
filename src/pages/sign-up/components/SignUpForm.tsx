@@ -1,6 +1,7 @@
 import { useForm } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
+import { getCsrfToken } from '@/lib/api/auth';
 import { createUser } from '@/lib/api/users';
 import type { UserCreateRequest } from '@/lib/types';
 import { Button } from '@/components/ui/button';
@@ -53,6 +54,7 @@ export default function SignUpForm() {
         password: data.password,
       };
 
+      await getCsrfToken();
       await createUser(userData);
       toast.success('회원가입이 완료되었습니다');
       navigate('/sign-in');

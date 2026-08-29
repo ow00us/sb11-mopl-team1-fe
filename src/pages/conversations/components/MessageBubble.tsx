@@ -67,7 +67,12 @@ export default function MessageBubble({
         <div className="min-w-0 bg-gray-800 px-3 py-1.5 rounded-tl-[20px] rounded-tr-[20px] rounded-bl-[2px] rounded-br-[20px] max-w-[min(600px,calc(100%-3rem))]">
           <p className="text-body2-m-160 text-white break-words">{message.content}</p>
         </div>
-        <div className="flex shrink-0 items-center px-0 py-1">
+        <div className="flex shrink-0 flex-col items-start gap-0.5 px-0 py-1">
+          {showReadStatus && (
+            <span className="text-caption1-m text-pink-400">
+              {message.readAt ? '읽음' : '미읽음'}
+            </span>
+          )}
           <span className="text-caption1-m text-gray-600">
             {formatTime(message.createdAt)}
           </span>

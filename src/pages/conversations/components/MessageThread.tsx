@@ -10,6 +10,7 @@ import useConversationDetailStore from "@/lib/stores/useConversationDetailStore.
 import {markDirectMessageAsRead} from "@/lib/api";
 import useConversationStore from "@/lib/stores/useConversationStore.ts";
 import {useNavigate} from "react-router-dom";
+import useNotificationStore from '@/lib/stores/useNotificationStore';
 
 interface MessageThreadProps {
   conversationId: string;
@@ -72,10 +73,17 @@ export default function MessageThread({
       && latestMessage.receiver.userId === currentUserId
       && !latestMessage.readAt
     ) {
-      void markDirectMessageAsRead(conversation.id, latestMessage.id).catch((error) => {
-        console.error('Failed to mark direct message as read:', error);
-      });
-      updateConversation(conversation.id, { hasUnread: false });
+      void markDirectMessageAsRead(conversation.id, latestMessage.id)
+        .then(() => {
+          useDirectMessageStore.getState().update(latestMessage.id, {
+            readAt: new Date().toISOString(),
+          });
+          updateConversation(conversation.id, { hasUnread: false });
+          void useNotificationStore.getState().fetch({ ignoreLoading: true });
+        })
+        .catch((error) => {
+          console.error('Failed to mark direct message as read:', error);
+        });
     }
   }, [authentication?.userDto.id, conversation, updateConversation]);
 
@@ -161,19 +169,14 @@ export default function MessageThread({
     return currentMessage.sender.userId !== previousMessage.sender.userId;
   };
 
-  // 같은 발신자가 연속으로 보낸 묶음의 마지막 메시지에만 읽음 상태를 표시합니다.
-  const isLastInSenderGroup = (index: number, messagesArray: typeof messages): boolean => {
-    if (index === messagesArray.length - 1) return true;
-    return messagesArray[index].sender.userId !== messagesArray[index + 1].sender.userId;
-  };
-
   // Get other user info (temporary - assumes first message sender who isn't me)
   const currentUserId = authentication?.userDto.id;
   const otherUser = conversation?.with;
   const otherUserName = otherUser?.name;
 
-  // Reverse messages for display (server returns newest first, but UI shows oldest first)
-  const displayMessages = messages.slice().reverse();
+  const displayMessages = messages
+    .slice()
+    .sort((first, second) => first.messageSequence - second.messageSequence);
 
   return (
     <div className="flex flex-col h-full">
@@ -239,7 +242,7 @@ export default function MessageThread({
                     message={message}
                     isMine={isMine}
                     showProfile={shouldShowProfile(index, displayMessages)}
-                    showReadStatus={isMine && isLastInSenderGroup(index, displayMessages)}
+                    showReadStatus={index === displayMessages.length - 1}
                   />
                 );
               })}

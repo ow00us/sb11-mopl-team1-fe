@@ -228,7 +228,13 @@ export function createPaginatedStoreActions<T, P extends CursorParams>(
           return {data};
         }
 
-        const cursorState: CursorState = {...state.cursorState, totalCount: state.cursorState.totalCount+1}
+        const cursorState: CursorState = {
+          ...state.cursorState,
+          totalCount: state.cursorState.totalCount + 1,
+          unreadCount: state.cursorState.unreadCount == null
+            ? undefined
+            : state.cursorState.unreadCount + 1,
+        }
 
         const params = state.params;
         const sortBy = (params as any)['sortBy'];
@@ -302,6 +308,7 @@ export function createPaginatedStoreActions<T, P extends CursorParams>(
             nextIdAfter: result.nextIdAfter ?? undefined,
             hasNext: result.hasNext == undefined ? false : result.hasNext,
             totalCount: result.totalCount == undefined ? 0 : result.totalCount,
+            unreadCount: (result as { unreadCount?: number }).unreadCount,
           },
         });
 
@@ -346,6 +353,7 @@ export function createPaginatedStoreActions<T, P extends CursorParams>(
             nextIdAfter: result.nextIdAfter ?? undefined,
             hasNext: result.hasNext == undefined ? false : result.hasNext,
             totalCount: result.totalCount == undefined ? 0 : result.totalCount,
+            unreadCount: (result as { unreadCount?: number }).unreadCount,
           },
         });
 
